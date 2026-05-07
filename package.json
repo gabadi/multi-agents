@@ -11,9 +11,7 @@
   "files": [
     "src/",
     "skills/",
-    "prompts/",
     "dashboard/",
-    "patches/",
     "README.md",
     "AGENTS.md",
     "create-project-task.ts",
@@ -36,9 +34,6 @@
     ],
     "skills": [
       "./skills"
-    ],
-    "prompts": [
-      "./prompts"
     ]
   },
   "devDependencies": {

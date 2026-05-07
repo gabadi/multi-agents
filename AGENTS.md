@@ -48,8 +48,6 @@ If this variable is missing, Fabric commands and tools will not be available.
 - `src/agents/` — standalone-agent namespace
 - `skills/` — agent role instructions
 - `dashboard/` — browser UI
-- `prompts/` — prompt templates
-- `patches/` — optional patches
 
 ## Default runtime layout
 

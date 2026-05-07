@@ -74,7 +74,6 @@ multi-agents/
 ├── skills/
 ├── prompts/
 ├── dashboard/
-└── patches/
 ```
 
 ### Important directories
@@ -84,7 +83,6 @@ multi-agents/
 - `src/agents/` — standalone-agent namespace for external/optional agents
 - `skills/` — role definitions loaded dynamically by the launcher
 - `dashboard/` — browser UI powered by the monitor SSE stream
-- `prompts/` — reusable prompts/templates
 
 ---
 
@@ -505,7 +503,6 @@ This public repository intentionally keeps:
 
 - runtime code
 - skills
-- prompts
 - dashboard assets
 - helper scripts
 - shareable agent assets
