@@ -1,0 +1,44 @@
+{
+  "name": "cmd-center",
+  "version": "0.2.0",
+  "description": "Fabric Agents cooperative system for pi.dev — tmux + mailbox + SIGUSR1 + real-time monitor dashboard",
+  "keywords": [
+    "pi-package",
+    "multi-agent",
+    "tmux",
+    "pi.dev"
+  ],
+  "files": [
+    "src/",
+    "skills/",
+    "prompts/",
+    "dashboard/",
+    "patches/",
+    "README.md",
+    "create-project-task.ts",
+    "setup-subcoordinator.sh"
+  ],
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "scripts": {
+    "monitor": "npx tsx src/core/monitor.ts --port=7474",
+    "launcher": "npx tsx src/core/launcher.ts",
+    "clean": "rm -rf /tmp/fabric-agents"
+  },
+  "pi": {
+    "extensions": [
+      "./src/core/extension.ts"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts"
+    ]
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

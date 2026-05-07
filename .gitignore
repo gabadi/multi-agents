@@ -1,0 +1,14 @@
+# macOS / editor noise
+.DS_Store
+
+# local dependencies and generated artifacts
+node_modules/
+package-lock.json
+*.jsonl
+worktrees/
+data/
+
+# internal planning and documentation kept local only
+plans/
+docs/
+lessons/

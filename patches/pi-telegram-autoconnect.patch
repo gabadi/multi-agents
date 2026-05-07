@@ -1,0 +1,241 @@
+--- /Users/jescobar/.pi/agent/git/github.com/badlogic/pi-telegram/index.ts.bak	2026-05-04 16:49:34
++++ /Users/jescobar/.pi/agent/git/github.com/badlogic/pi-telegram/index.ts	2026-05-04 23:39:51
+@@ -1,6 +1,8 @@
+ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
++import { existsSync } from "node:fs";
+ import { basename, extname, join } from "node:path";
+ import { homedir } from "node:os";
++import { DatabaseSync } from "node:sqlite";
+ 
+ import type { ImageContent, TextContent } from "@mariozechner/pi-ai";
+ import type { AgentMessage } from "@mariozechner/pi-agent-core";
+@@ -282,8 +284,78 @@
+ async function writeConfig(config: TelegramConfig): Promise<void> {
+ 	await mkdir(join(homedir(), ".pi", "agent"), { recursive: true });
+ 	await writeFile(CONFIG_PATH, JSON.stringify(config, null, "\t") + "\n", "utf8");
++}
++
++// ── Fabric Registry Lock ─────────────────────────────────────────────
++// Prevents multiple pi sessions from polling the same Telegram bot.
++// Uses the Fabric agent registry (SQLite) as the single source of truth.
++
++const FABRIC_REGISTRY = process.env.FABRIC_REGISTRY_DB ?? "/tmp/fabric-agents/registry.sqlite";
++
++function isPidAlive(pid: number): boolean {
++	try { process.kill(pid, 0); return true; } catch { return false; }
+ }
+ 
++function ensureLockTable(db: DatabaseSync): void {
++	db.exec(`
++		CREATE TABLE IF NOT EXISTS telegram_owner (
++			agent_id TEXT PRIMARY KEY,
++			pid INTEGER NOT NULL,
++			connected_at TEXT DEFAULT (datetime('now'))
++		);
++	`);
++}
++
++function getTelegramLock(): { agent_id: string; pid: number } | null {
++	if (!existsSync(FABRIC_REGISTRY)) return null;
++	try {
++		const db = new DatabaseSync(FABRIC_REGISTRY);
++		ensureLockTable(db);
++		const row = db.prepare("SELECT agent_id, pid FROM telegram_owner LIMIT 1").get() as { agent_id: string; pid: number } | undefined;
++		db.close();
++		if (row && isPidAlive(row.pid)) return row;
++		// Stale lock – clean it up
++		if (row) releaseTelegramLock(row.agent_id);
++		return null;
++	} catch {
++		return null;
++	}
++}
++
++function acquireTelegramLock(agentId: string, pid: number): boolean {
++	if (!existsSync(FABRIC_REGISTRY)) return true; // no registry = no contention, allow
++	try {
++		const db = new DatabaseSync(FABRIC_REGISTRY);
++		ensureLockTable(db);
++		const existing = db.prepare("SELECT agent_id, pid FROM telegram_owner LIMIT 1").get() as { agent_id: string; pid: number } | undefined;
++		if (existing) {
++			if (isPidAlive(existing.pid) && existing.pid !== pid) {
++				db.close();
++				return false;
++			}
++			// stale or own lock – replace
++			db.prepare("DELETE FROM telegram_owner").run();
++		}
++		db.prepare("INSERT INTO telegram_owner (agent_id, pid) VALUES (?, ?)").run(agentId, pid);
++		db.close();
++		return true;
++	} catch {
++		return true; // if DB fails, don't block Telegram
++	}
++}
++
++function releaseTelegramLock(agentId?: string): void {
++	if (!existsSync(FABRIC_REGISTRY)) return;
++	const id = agentId ?? process.env.PI_AGENT_ID ?? "unknown";
++	try {
++		const db = new DatabaseSync(FABRIC_REGISTRY);
++		db.prepare("DELETE FROM telegram_owner WHERE agent_id = ?").run(id);
++		db.close();
++	} catch {
++		// ignore cleanup errors
++	}
++}
++
+ export default function (pi: ExtensionAPI) {
+ 	let config: TelegramConfig = {};
+ 	let pollingController: AbortController | undefined;
+@@ -671,6 +743,23 @@
+ 		pollingController = undefined;
+ 		await pollingPromise?.catch(() => undefined);
+ 		pollingPromise = undefined;
++		releaseTelegramLock();
++	}
++
++	async function clearBridgeState(): Promise<void> {
++		stopTypingLoop();
++		queuedTelegramTurns = [];
++		for (const state of mediaGroups.values()) {
++			if (state.flushTimer) clearTimeout(state.flushTimer);
++		}
++		mediaGroups.clear();
++		if (activeTelegramTurn) {
++			await clearPreview(activeTelegramTurn.chatId);
++		}
++		activeTelegramTurn = undefined;
++		previewState = undefined;
++		currentAbort = undefined;
++		preserveQueuedTurnsAsHistory = false;
+ 	}
+ 
+ 	function formatTelegramHistoryText(rawText: string, files: DownloadedTelegramFile[]): string {
+@@ -755,6 +844,57 @@
+ 			return;
+ 		}
+ 
++		if (lower === "/new" || lower === "new" || lower === "/clear" || lower === "clear") {
++			if (currentAbort) {
++				preserveQueuedTurnsAsHistory = false;
++				queuedTelegramTurns = [];
++				currentAbort();
++			}
++
++			// Wait briefly for agent to become idle after abort
++			let attempts = 0;
++			while (!ctx.isIdle() && attempts < 50) {
++				await new Promise((r) => setTimeout(r, 100));
++				attempts++;
++			}
++
++			await clearBridgeState();
++
++			// Strategy 1: resetLeaf() — cleanest, resets to empty conversation
++			const sm = ctx.sessionManager as any;
++			if (sm.resetLeaf) {
++				try {
++					sm.resetLeaf();
++					await sendTextReply(firstMessage.chat.id, firstMessage.message_id, "✅ Context cleared! Ready for fresh start.");
++					return;
++				} catch {
++					// fall through to navigateTree fallback
++				}
++			}
++
++			// Strategy 2: navigateTree to the earliest user message in this session
++			const entries = sm.getEntries ? sm.getEntries() : [];
++			const firstUserEntry = entries.find(
++				(e: any) => e.type === "message" && e.message?.role === "user",
++			);
++
++			if (firstUserEntry) {
++				const cmdCtx = ctx as any;
++				if (cmdCtx.navigateTree) {
++					const result = await cmdCtx.navigateTree(firstUserEntry.id, { summarize: false });
++					if (result.cancelled) {
++						await sendTextReply(firstMessage.chat.id, firstMessage.message_id, "❌ Clear was cancelled by an extension hook.");
++						return;
++					}
++				} else if (sm.branch) {
++					try { sm.branch(firstUserEntry.id); } catch { /* ignore */ }
++				}
++			}
++
++			await sendTextReply(firstMessage.chat.id, firstMessage.message_id, "✅ Context cleared! Ready for fresh start.");
++			return;
++		}
++
+ 		if (lower === "/compact") {
+ 			if (!ctx.isIdle()) {
+ 				await sendTextReply(firstMessage.chat.id, firstMessage.message_id, "Cannot compact while pi is busy. Send \"stop\" first.");
+@@ -824,7 +964,7 @@
+ 			await sendTextReply(
+ 				firstMessage.chat.id,
+ 				firstMessage.message_id,
+-				`Send me a message and I will forward it to pi. Commands: /status, /compact, stop.`,
++				`Send me a message and I will forward it to pi. Commands: /new, /clear, /status, /compact, stop.`,
+ 			);
+ 			if (config.allowedUserId === undefined && firstMessage.from) {
+ 				config.allowedUserId = firstMessage.from.id;
+@@ -935,6 +1075,11 @@
+ 
+ 	async function startPolling(ctx: ExtensionContext): Promise<void> {
+ 		if (!config.botToken || pollingPromise) return;
++		const agentId = process.env.PI_AGENT_ID ?? `pi-${process.pid}`;
++		if (!acquireTelegramLock(agentId, process.pid)) {
++			// Another session owns Telegram — silently skip to avoid noise in secondary sessions
++			return;
++		}
+ 		pollingController = new AbortController();
+ 		pollingPromise = pollLoop(ctx, pollingController.signal).finally(() => {
+ 			pollingPromise = undefined;
+@@ -1019,11 +1164,47 @@
+ 			updateStatus(ctx);
+ 		},
+ 	});
++
++	pi.registerCommand("telegram-new", {
++		description: "Clear session context from Telegram",
++		handler: async (_args, ctx) => {
++			await clearBridgeState();
+ 
++			const entries = ctx.sessionManager.getEntries();
++			const rootEntry = entries.find(
++				(e: any) => e.type === "message" && e.message?.role === "user" && e.parentId === null,
++			);
++
++			if (rootEntry) {
++				const result = await ctx.navigateTree(rootEntry.id, { summarize: false });
++				if (result.cancelled) {
++					ctx.ui.notify("Clear session was cancelled by an extension hook.", "warn");
++				}
++			} else {
++				ctx.ui.notify("Session is already empty.", "info");
++			}
++		},
++	});
++
+ 	pi.on("session_start", async (_event, ctx) => {
+ 		config = await readConfig();
+ 		await mkdir(TEMP_DIR, { recursive: true });
+ 		updateStatus(ctx);
++
++		// Auto-connect Telegram for interactive sessions (boss/coordinator)
++		// when a bot token is already configured. This ensures Telegram survives
++		// across /new or session restarts without manual /telegram-connect.
++		// Can be forced with PI_TELEGRAM_AUTO_CONNECT=TRUE even in headless rpc mode.
++		// NOTE: In Fabric mode (ENABLE_CMD_CENTER), only the dedicated telegram-gateway
++		// agent should hold the Telegram lock. Coordinators must NOT auto-connect.
++		const isFabricMode = process.env.ENABLE_CMD_CENTER === "TRUE";
++		const shouldAutoConnect = isFabricMode
++			? process.env.PI_TELEGRAM_AUTO_CONNECT === "TRUE"
++			: (ctx.hasUI || process.env.PI_TELEGRAM_AUTO_CONNECT === "TRUE");
++		if (config.botToken && !pollingPromise && shouldAutoConnect) {
++			await startPolling(ctx);
++			updateStatus(ctx);
++		}
+ 	});
+ 
+ 	pi.on("session_shutdown", async (_event, _ctx) => {
