@@ -9,8 +9,6 @@ mode: rpc
 
 # Setup Skill
 
-See also (English architecture context): `docs/lazy/extensions-startup-and-messaging.md`
-
 ## Inter-Agent Mailbox Protocol (Strict)
 
 Mailbox traffic is machine-to-machine control data. It is not human-facing chat.
@@ -67,13 +65,13 @@ Without this variable:
 ## Install
 
 ```bash
-pi install /Users/jescobar/code/cmd-center-v2
+pi install .
 ```
 
 For local development hot reload:
 
 ```bash
-ln -s /Users/jescobar/code/cmd-center-v2 ~/.pi/agent/extensions/cmd-center
+ln -s "$(pwd)" ~/.pi/agent/extensions/cmd-center
 ```
 
 ## Launch Coordinator

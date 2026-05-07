@@ -1,94 +1,192 @@
-# cmd-center
+# multi-agents
 
-A lightweight multi-agent command center for `pi.dev`.
+A local multi-agent orchestration system for `pi.dev`.
 
-`cmd-center` lets you run a coordinator plus multiple specialist agents inside `tmux`, with peer-to-peer communication over mailbox files and `SIGUSR1`. It is designed for local orchestration without Redis, Docker, or a separate message broker.
+This repository lets you run one interactive coordinator plus multiple specialist agents inside `tmux`, using:
 
-## What it does
+- file-based mailboxes
+- `SIGUSR1` wakeups
+- a shared SQLite registry
+- skill-based agent roles
+- an HTTP/SSE monitor dashboard
 
-- Launches AI agents as `tmux` panes
-- Uses file-based mailboxes for agent-to-agent messaging
-- Wakes sleeping workers with `SIGUSR1`
-- Keeps a shared agent registry in SQLite
-- Exposes a monitor/dashboard over HTTP + SSE
-- Loads reusable role skills from `skills/*/SKILL.md`
-- Supports coordinator, sub-coordinator, dev, reviewer, tester, devops, security, git, and chat roles
+It does **not** require Redis, RabbitMQ, Docker, or Kubernetes.
 
-## Requirements
+## What is in this repo
 
-Before using this package, make sure you have:
+- `src/core/` — the `pi.dev` extension, launcher, monitor, registry helpers, Telegram bridge
+- `src/pm/` — project/task tracking over SQLite
+- `src/agents/` — standalone-agent namespace for optional external agents
+- `skills/` — role definitions for coordinator, dev, reviewer, tester, devops, security, git, chat, setup, architect, and sub-coordinator
+- `dashboard/` — browser dashboard
+- `prompts/` — reusable prompts
+- `patches/` — optional integration patches
 
-- `pi` installed and working
-- Node.js 22+ with `tsx` support available through `npx`
+## Minimum environment
+
+To run this repository, the minimum practical environment is:
+
+- macOS or Linux
+- `git`
 - `tmux`
-- a Unix-like environment with `sqlite` support in Node
+- Node.js **22+**
+- `npm`
+- `pi` installed and working
+- a shell such as `bash` or `zsh`
 
-## Installation
+Optional but useful:
 
-### Install from a local path
+- `sqlite3` CLI for debugging the registry and PM database
+- a modern browser for the dashboard
+- Telegram bot credentials if you want the Telegram bridge
+
+## Important requirement: `pi` must already exist
+
+This repository extends `pi.dev`; it does not replace it.
+
+If this command fails, install/configure `pi` first:
 
 ```bash
-pi install /path/to/cmd-center-v2
+pi --version
 ```
 
-### Install from Git
+Also verify `tmux` and Node:
+
+```bash
+tmux -V
+node -v
+npm -v
+```
+
+## Quick start
+
+### 1. Clone the repository
+
+```bash
+git clone git@github.com:deazoft/multi-agents.git
+cd multi-agents
+```
+
+### 2. Install local Node dependencies
+
+```bash
+npm install
+```
+
+### 3. Install the package into `pi`
+
+From the repository root:
+
+```bash
+pi install .
+```
+
+You can also install directly from Git:
 
 ```bash
 pi install git:github.com/deazoft/multi-agents.git
 ```
 
-## Enable the extension
+For active development, a symlink also works:
 
-The Fabric extension is intentionally dormant until you enable it.
+```bash
+ln -s "$(pwd)" ~/.pi/agent/extensions/cmd-center
+```
 
-Set the environment variable before starting `pi`:
+### 4. Enable the extension
+
+The extension is intentionally inactive unless this variable is set **before starting `pi`**:
 
 ```bash
 export ENABLE_CMD_CENTER=TRUE
 ```
 
-If this variable is missing, the package stays transparent and the Fabric commands/tools are not registered.
+Without it:
 
-## Start the monitor
+- Fabric commands are not registered
+- Fabric tools are not visible to the model
+- no mailbox/SIGUSR1 lifecycle is activated
 
-The monitor provides the local HTTP/SSE stream used by the dashboard.
+### 5. Start the monitor
+
+In one terminal:
 
 ```bash
+export ENABLE_CMD_CENTER=TRUE
 npx tsx src/core/monitor.ts --port=7474
 ```
 
-Then open the dashboard at:
+Open the dashboard at:
 
 ```text
 http://localhost:7474
 ```
 
-## Launch agents
+### 6. Start the coordinator
 
-### Coordinator
+In another terminal:
 
 ```bash
+export ENABLE_CMD_CENTER=TRUE
 npx tsx src/core/launcher.ts --role=coordinator --agent-id=boss --mode=interactive
 ```
 
-### Worker examples
+This creates or reuses a `tmux` session and starts the main coordinator.
+
+Attach to the session if needed:
 
 ```bash
-npx tsx src/core/launcher.ts --role=reviewer --agent-id=alice --mode=rpc
-npx tsx src/core/launcher.ts --role=dev --agent-id=builder --mode=rpc
-npx tsx src/core/launcher.ts --role=devops --agent-id=ops --mode=rpc
+tmux attach -t fabric-default
 ```
 
-## Runtime model
+### 7. Start workers
 
-The system uses:
+Examples:
 
-- `tmux` for process layout
-- mailbox JSONL files for communication
-- `SIGUSR1` for wakeups
-- SQLite for the shared registry and project-management state
+```bash
+export ENABLE_CMD_CENTER=TRUE
+npx tsx src/core/launcher.ts --role=reviewer --agent-id=reviewer-1 --mode=rpc
+npx tsx src/core/launcher.ts --role=dev --agent-id=dev-1 --mode=rpc
+npx tsx src/core/launcher.ts --role=tester --agent-id=tester-1 --mode=rpc
+```
 
-Runtime data is stored under:
+## One-copy-paste demo
+
+If you want the smallest possible working demo, use these three terminals.
+
+### Terminal 1 — monitor
+
+```bash
+cd multi-agents
+export ENABLE_CMD_CENTER=TRUE
+npx tsx src/core/monitor.ts --port=7474
+```
+
+### Terminal 2 — coordinator
+
+```bash
+cd multi-agents
+export ENABLE_CMD_CENTER=TRUE
+npx tsx src/core/launcher.ts --role=coordinator --agent-id=boss --mode=interactive
+```
+
+### Terminal 3 — one worker
+
+```bash
+cd multi-agents
+export ENABLE_CMD_CENTER=TRUE
+npx tsx src/core/launcher.ts --role=dev --agent-id=dev-1 --mode=rpc
+```
+
+Now open the dashboard at `http://localhost:7474` and attach to tmux if you want to inspect panes:
+
+```bash
+tmux attach -t fabric-default
+```
+
+## How the runtime works
+
+Runtime state lives by default in:
 
 ```text
 /tmp/fabric-agents/
@@ -102,25 +200,45 @@ Typical contents:
 ├── mailboxes/{agent-id}.jsonl
 ├── pids/{agent-id}.pid
 ├── state/{agent-id}.json
+├── agents.jsonl
 ├── projects.sqlite
 └── projects.jsonl
 ```
 
-## Main package contents
+The basic model is:
 
-This shareable package focuses on installable/runtime assets:
+1. an agent writes a JSONL message into another agent's mailbox
+2. the sender raises `SIGUSR1`
+3. the target wakes up and processes the new mailbox content
+4. shared state is reflected in SQLite
 
-- `src/` — extension, launcher, monitor, PM domain
-- `skills/` — agent role instructions
-- `prompts/` — reusable prompt templates
-- `dashboard/` — browser dashboard
-- `patches/` — optional integration patches
+## Available roles
 
-Internal planning notes and long-form documentation are kept out of the shareable package flow.
+These roles are included in `skills/`:
 
-## Useful commands inside `pi`
+- `coordinator`
+- `sub-coordinator`
+- `dev`
+- `reviewer`
+- `tester`
+- `devops`
+- `security`
+- `git`
+- `architect`
+- `chat`
+- `setup`
+- `orchestrator`
 
-Once the extension is active, the interactive coordinator can use commands such as:
+### Recommended usage
+
+- use `coordinator` in `interactive` mode
+- use workers in `rpc` mode
+- launch new agents through `src/core/launcher.ts`
+- keep `ENABLE_CMD_CENTER=TRUE` in every terminal that starts a Fabric agent
+
+## Commands available inside `pi`
+
+When the extension is loaded, the coordinator can use commands such as:
 
 ```text
 /fabric-list
@@ -129,22 +247,148 @@ Once the extension is active, the interactive coordinator can use commands such 
 /fabric-report
 /fabric-workers
 /fabric-launch-worker
+/reload
 ```
 
-If you changed the extension code and want `pi` to reload tool schemas, run:
+`/reload` is useful after changing extension code so that `pi` reloads command/tool schemas.
+
+## Example: launching a sub-coordinator in a separate worktree
+
+You can use the helper script:
+
+```bash
+REPO_DIR="$(pwd)" TASK_ID="42" ./setup-subcoordinator.sh
+```
+
+Or call the launcher directly:
+
+```bash
+export ENABLE_CMD_CENTER=TRUE
+export FABRIC_PARENT_AGENT_ID=boss
+export FABRIC_TASK_ID=42
+npx tsx src/core/launcher.ts \
+  --role=sub-coordinator \
+  --agent-id=sub-boss-42 \
+  --mode=interactive \
+  --session=fabric-task-42 \
+  --workspace-dir="$(pwd)"
+```
+
+## Example: creating a sample PM project and task
+
+This repository includes a small helper script you can run from the repo root:
+
+```bash
+PROJECT_NAME="Demo Project" \
+TASK_TITLE="Review launcher flow" \
+TASK_DESCRIPTION="Validate that coordinator and worker startup succeeds" \
+npx tsx create-project-task.ts
+```
+
+Example output:
+
+```json
+{
+  "ok": true,
+  "dbPath": "/tmp/fabric-agents/projects.sqlite",
+  "project": {
+    "id": 1,
+    "name": "Demo Project",
+    "repo_local_path": "/path/to/repo"
+  },
+  "task": {
+    "id": 1,
+    "title": "Review launcher flow",
+    "branch_name": "main"
+  }
+}
+```
+
+## Example: structured task contract
+
+A coordinator should send structured tasks to workers. Conceptually, the payload looks like this:
+
+```json
+{
+  "to": "dev-1",
+  "description": "Implement input validation in src/api/users.ts",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "description": "src/api/users.ts contains validateUser",
+      "type": "file_contains",
+      "params": {
+        "path": "src/api/users.ts",
+        "pattern": "validateUser"
+      },
+      "required": true
+    },
+    {
+      "id": "ac-2",
+      "description": "unit tests pass",
+      "type": "test_passes",
+      "params": {
+        "command": "npm test"
+      },
+      "required": true
+    }
+  ],
+  "report_to_when_done": "boss",
+  "task_id": "task-42"
+}
+```
+
+## Troubleshooting
+
+### Fabric commands do not appear inside `pi`
+
+Make sure:
+
+```bash
+export ENABLE_CMD_CENTER=TRUE
+```
+
+Then restart `pi` or run:
 
 ```text
 /reload
 ```
 
-## Development notes
+### The launcher cannot find the extension
 
-- No Redis
-- No Docker
-- No central broker
-- Workers stay idle until they receive a mailbox event
-- The coordinator is typically the only interactive agent; workers should run in `rpc` mode
+Install the package from the repository root:
 
-## License / sharing
+```bash
+pi install .
+```
 
-Share this repository as a `pi` package or install it directly from Git. The repo is structured so the runtime code and agent assets are the main deliverables.
+Then retry the launcher.
+
+### The monitor starts but the dashboard looks empty
+
+Check whether agents have started and registered:
+
+```bash
+sqlite3 /tmp/fabric-agents/registry.sqlite "SELECT agent_id, role, status, last_seen_at FROM agents;"
+```
+
+### You want a clean reset
+
+```bash
+rm -rf /tmp/fabric-agents
+tmux kill-session -t fabric-default || true
+```
+
+## Notes for contributors
+
+- the runtime is intentionally local-first and file-based
+- workers should stay idle until they receive mailbox activity
+- do not replace SIGUSR1 wakeups with polling
+- the coordinator is typically the only interactive agent
+- all runtime configuration is environment-variable driven
+
+## Shareable/public version policy
+
+This public repository keeps the runtime code, skills, prompts, dashboard, helper scripts, and agent assets.
+
+Large internal planning documents and private working notes are intentionally excluded from the public shareable flow.

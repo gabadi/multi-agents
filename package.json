@@ -15,6 +15,7 @@
     "dashboard/",
     "patches/",
     "README.md",
+    "AGENTS.md",
     "create-project-task.ts",
     "setup-subcoordinator.sh"
   ],
@@ -25,6 +26,8 @@
   "scripts": {
     "monitor": "npx tsx src/core/monitor.ts --port=7474",
     "launcher": "npx tsx src/core/launcher.ts",
+    "start:boss": "ENABLE_CMD_CENTER=TRUE npx tsx src/core/launcher.ts --role=coordinator --agent-id=boss --mode=interactive",
+    "start:monitor": "ENABLE_CMD_CENTER=TRUE npx tsx src/core/monitor.ts --port=7474",
     "clean": "rm -rf /tmp/fabric-agents"
   },
   "pi": {
@@ -39,6 +42,7 @@
     ]
   },
   "devDependencies": {
+    "tsx": "^4.20.6",
     "typescript": "^6.0.3"
   }
 }

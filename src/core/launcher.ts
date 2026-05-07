@@ -8,7 +8,7 @@
 import { execSync, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, existsSync, statSync, appendFileSync, readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadProfileFromSkill, getSkillPath, listAvailableRoles } from "./skill-loader.js";
 import { openFabricDbReadOnly, prepareAllWithRetry } from "./sqlite-utils.js";
@@ -117,20 +117,26 @@ function tmuxExec(cmd: string): string {
 
 function ensurePiExtensionInstalled(): void {
   try {
-    const hotReloadSymlink = resolve(process.env.HOME || "", ".pi/agent/extensions/cmd-center");
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+    const packageJsonPath = resolve(repoRoot, "package.json");
+    const packageName = existsSync(packageJsonPath)
+      ? String(JSON.parse(readFileSync(packageJsonPath, "utf8")).name || basename(repoRoot))
+      : basename(repoRoot);
+
+    const hotReloadSymlink = resolve(process.env.HOME || "", `.pi/agent/extensions/${packageName}`);
     if (existsSync(hotReloadSymlink)) {
-      console.log(`[launcher] Extension cmd-center available via hot-reload symlink: ${hotReloadSymlink}`);
+      console.log(`[launcher] Extension ${packageName} available via hot-reload symlink: ${hotReloadSymlink}`);
       return;
     }
 
     const listOutput = execSync("pi list", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
-    const isInstalled = listOutput.includes("cmd-center-v2");
+    const isInstalled = listOutput.includes(packageName) || listOutput.includes(basename(repoRoot));
     if (!isInstalled) {
-      console.log("[launcher] Extension cmd-center-v2 not found in pi. Installing...");
-      execSync("pi install /Users/jescobar/code/cmd-center-v2", { encoding: "utf8", stdio: "inherit" });
+      console.log(`[launcher] Extension ${packageName} not found in pi. Installing from ${repoRoot}...`);
+      execSync(`pi install ${shellQuote(repoRoot)}`, { encoding: "utf8", stdio: "inherit" });
       console.log("[launcher] Extension installed successfully.");
     } else {
-      console.log("[launcher] Extension cmd-center-v2 already installed in pi.");
+      console.log(`[launcher] Extension ${packageName} already installed in pi.`);
     }
   } catch (err) {
     console.warn("[launcher] Could not verify/install pi extension:", (err as Error).message);

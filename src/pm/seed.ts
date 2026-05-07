@@ -13,7 +13,7 @@ export function seed(dbPath: string = "data/project_management.db"): void {
   db.prepare(`
     INSERT OR IGNORE INTO projects (code, name, repo_url)
     VALUES (?, ?, ?)
-  `).run('p01', 'Sistema de Agentes Fabric', 'https://github.com/jescobar/cmd-center-v2');
+  `).run('p01', 'Fabric Multi-Agent System', 'https://github.com/deazoft/multi-agents');
 
   const projectId = (db.prepare(`SELECT id FROM projects WHERE code = ?`).get('p01') as { id: number }).id;
 
@@ -71,7 +71,7 @@ export function seed(dbPath: string = "data/project_management.db"): void {
   db.prepare(`
     INSERT OR IGNORE INTO project_links (project_id, link_type, url, description)
     VALUES (?, ?, ?, ?)
-  `).run(projectId, 'github', 'https://github.com/jescobar/cmd-center-v2', 'Main repository');
+  `).run(projectId, 'github', 'https://github.com/deazoft/multi-agents', 'Main repository');
 
   // 6. Event logs
   type EntityType = 'project' | 'task' | 'subtask';
@@ -92,7 +92,7 @@ export function seed(dbPath: string = "data/project_management.db"): void {
     stmtEvent.run(e[0], e[1], e[2], e[3], e[4], e[5]);
   }
 
-  console.log(`Seed completado en: ${dbPath}`);
+  console.log(`Seed completed at: ${dbPath}`);
   db.close();
 }
 

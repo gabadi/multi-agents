@@ -25,8 +25,8 @@ export function runIntegrationTest(dbPath: string = ":memory:"): { passed: boole
     const project = createProject(db, {
       name: "Fabric Coordination",
       code: "fab-coord",
-      repo_url: "https://github.com/jescobar/cmd-center-v2",
-      repo_local_path: "/Users/jescobar/code/cmd-center-v2"
+      repo_url: "https://github.com/deazoft/multi-agents",
+      repo_local_path: "/tmp/multi-agents"
     });
     const projectId = project.id;
     steps.push("Project created");
@@ -77,7 +77,7 @@ export function runIntegrationTest(dbPath: string = ":memory:"): { passed: boole
     steps.push("Subtask dependencies added");
 
     // Step 7: Attach PR to task1
-    attachPR(db, taskId1, "https://github.com/jescobar/cmd-center-v2/pull/1", 1);
+    attachPR(db, taskId1, "https://github.com/deazoft/multi-agents/pull/1", 1);
     steps.push("PR attached");
 
     // Step 8: Mark PR merged
