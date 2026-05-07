@@ -86,6 +86,91 @@ multi-agents/
 
 ---
 
+## How agent skills are loaded
+
+Agent skills are loaded from **files on disk**, not from the database.
+
+The source of truth is:
+
+```text
+skills/<role>/SKILL.md
+```
+
+Example:
+
+- `--role=dev` → `skills/dev/SKILL.md`
+- `--role=reviewer` → `skills/reviewer/SKILL.md`
+- `--role=coordinator` → `skills/coordinator/SKILL.md`
+
+### Loading flow
+
+When you launch an agent, the runtime does this:
+
+```text
+role -> skills/<role>/SKILL.md -> skill-loader.ts reads frontmatter -> launcher passes --skill to pi
+```
+
+More concretely:
+
+1. `src/core/launcher.ts` receives `--role=<role>`
+2. `src/core/skill-loader.ts` finds `skills/<role>/SKILL.md`
+3. it reads the frontmatter fields such as:
+   - `model`
+   - `tools`
+   - `thinking`
+   - `mode`
+   - `description`
+4. the launcher builds the agent profile from that file
+5. the launcher starts `pi` and passes the skill path through `--skill`
+
+This means the skill file is used in two ways:
+
+- to configure the agent launch profile
+- to load the full skill content into the running `pi` agent context
+
+### Are skills stored in SQLite?
+
+No.
+
+The SQLite databases are used for runtime and project-management state, such as:
+
+- registered agents
+- mailbox/runtime metadata
+- projects
+- tasks
+- subtasks
+- analyses
+- events
+
+But the actual skill definitions are **not** stored there.
+
+### Workspace/local skills
+
+If you launch an agent with a `workspace_dir`, the launcher can also load workspace-local skills from the target repository, for example:
+
+- `<workspace>/.pi/skills`
+- `<workspace>/skills`
+- `<workspace>/.agents/skills`
+- `<workspace>/.claude/skills`
+
+This is especially useful for sub-coordinators or workers running inside another repo.
+
+You can control that behavior with:
+
+- `--workspace-skills=<a,b,c>`
+- `--no-workspace-skills`
+
+### What happens if a skill changes?
+
+If you edit a `SKILL.md` file:
+
+- newly launched agents will use the updated version
+- already running agents usually need to be relaunched to pick up the change
+
+So in practice, skills are a **file-based source of truth**.
+
+---
+
 ## Minimum environment required
 
 This is the **minimum practical environment** needed to run the repo:
