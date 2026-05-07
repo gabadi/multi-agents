@@ -557,6 +557,16 @@ Inside `pi`, run:
 /reload
 ```
 
+### Remove local Telegram bot token/config
+
+If you want to delete the locally stored Telegram bot configuration from your machine, remove:
+
+```bash
+rm -f ~/.pi/agent/telegram.json ~/.pi/agent/telegram-config.json
+```
+
+After that, the monitor will no longer be able to connect to Telegram until you configure it again.
+
 ---
 
 ## Who this is for
