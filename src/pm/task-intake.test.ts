@@ -36,7 +36,7 @@ describe("task-intake", () => {
     db.close();
   });
 
-  test("planTaskCreation requires explicit repo path confirmation for create_and_kickoff", () => {
+  test("planTaskCreation defaults to kickoff intent and requires explicit repo path confirmation", () => {
     const db = initDb(dbPath);
     createProject(db, {
       name: "Fabric Control",
@@ -47,10 +47,10 @@ describe("task-intake", () => {
     const plan = planTaskCreation(db, {
       project_code: "fab",
       title: "Implement task creation",
-      behavior: "create_and_kickoff",
       git_root: "/repo/fabric",
     });
 
+    assert.strictEqual(plan.behavior, "create_and_kickoff");
     assert.strictEqual(plan.can_commit, false);
     assert.ok(plan.blockers.includes("repo_local_path_confirmation_required_for_kickoff"));
     assert.ok(plan.requires_confirmation);
@@ -118,7 +118,7 @@ describe("task-intake", () => {
     db.close();
   });
 
-  test("createTaskWithContext seeds kickoff metadata for create_and_kickoff tasks", () => {
+  test("createTaskWithContext seeds kickoff metadata by default for new tasks", () => {
     const db = initDb(dbPath);
     const project = createProject(db, {
       name: "Fabric Control",
@@ -129,13 +129,13 @@ describe("task-intake", () => {
     const created = createTaskWithContext(db, {
       project_id: project.id,
       title: "Launch benchmark task",
-      behavior: "create_and_kickoff",
       coordinator_agent_id: "boss",
       confirm_repo_local_path: "/repo/fabric",
       base_branch: "public-main",
     });
 
     assert.ok(created.task.id > 0);
+    assert.strictEqual(created.plan.behavior, "create_and_kickoff");
     assert.strictEqual(created.task.status, "draft");
     assert.strictEqual(created.task.orchestrator_agent_id, `sub-boss-${created.task.id}`);
     assert.strictEqual(created.plan.kickoff_supported, true);

@@ -396,6 +396,8 @@ Prefer the built-in PM tools over direct `sqlite3` updates:
    - `pm_get_project_context`
    - `pm_create_task_intelligent mode=preview`
    - `pm_create_task_intelligent mode=commit`
+   - default behavior is kickoff-intent: if `behavior` is omitted, commit creates the task, prepares a dedicated worktree/workspace, launches a dedicated sub-coordinator, persists PM kickoff metadata, and queues the initial context handoff
+   - use `behavior=create_only` only for backlog-only/no-kickoff task creation
 2. Inspection
    - `pm_list_tasks`
    - `pm_get_task`

@@ -31,7 +31,7 @@ import { initDb as initPmDb } from "../pm/db.js";
 import { buildCurrentProjectContext } from "../pm/project-context.js";
 import { cleanupTask, archiveProject } from "../pm/cleanup.js";
 import { getTaskById, getTaskWithDetails, getTasks } from "../pm/queries.js";
-import { createTaskWithContext, planTaskCreation } from "../pm/task-intake.js";
+import { createTaskWithContext, normalizeTaskIntakeBehavior, planTaskCreation } from "../pm/task-intake.js";
 import { setTaskPr } from "../pm/task-admin.js";
 import { updateStatus } from "../pm/transitions.js";
 import {
@@ -2559,13 +2559,14 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
   pi.registerTool({
     name: "pm_create_task_intelligent",
     label: "PM Create Task Intelligent",
-    description: "Crea tareas desde parámetros de alto nivel con preview|commit. Commit soporta create_only y create_and_kickoff con confirm_only para repo_local_path.",
-    promptSnippet: "Crear tareas PM sin SQL manual usando preview seguro y commit create_only/create_and_kickoff",
+    description: "Crea tareas desde parámetros de alto nivel con preview|commit. Si behavior se omite, el commit asume kickoff-intent por default y crea task+worktree+sub-coordinator; usa create_only solo para backlog/no kickoff.",
+    promptSnippet: "Crear tareas PM sin SQL manual usando preview seguro y commit con kickoff-intent por default",
     promptGuidelines: [
       "Usa pm_create_task_intelligent para evitar inserts manuales desde el coordinator.",
       "mode=preview es el default y no muta DB.",
-      "behavior=create_only crea solo la tarea y el análisis inicial.",
-      "behavior=create_and_kickoff crea la tarea, persiste repo_local_path solo con confirm_repo_local_path explícito cuando falta, prepara el worktree y lanza un sub-coordinator.",
+      "Si behavior se omite, el helper asume create_and_kickoff.",
+      "Usa behavior=create_only solo cuando el humano pidió backlog-only, sin worktree, o sin delegación todavía.",
+      "El kickoff-intent crea la tarea, persiste repo_local_path solo con confirm_repo_local_path explícito cuando falta, prepara el worktree, lanza un sub-coordinator y le deja el contexto inicial en mailbox.",
       "No backfillees projects.repo_local_path silenciosamente desde runtime hints; usa confirm_repo_local_path explícito.",
       "Si la resolución de proyecto es ambigua, devuelve blockers/warnings en vez de mutar estado.",
     ],
@@ -2576,7 +2577,7 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
       acceptance_criteria: Type.Optional(Type.Array(Type.String(), { description: "Acceptance criteria textuales opcionales" })),
       keywords: Type.Optional(Type.Array(Type.String(), { description: "Keywords para el análisis inicial" })),
       mode: Type.Optional(Type.String({ description: "preview | commit" })),
-      behavior: Type.Optional(Type.String({ description: "create_only | create_and_kickoff" })),
+      behavior: Type.Optional(Type.String({ description: "create_only | create_and_kickoff (default if omitted: create_and_kickoff)" })),
       confirm_repo_local_path: Type.Optional(Type.String({ description: "Explicit repo_local_path confirmation to persist before kickoff when the project is missing it" })),
       project_id: Type.Optional(Type.Number({ description: "ID del proyecto" })),
       project_code: Type.Optional(Type.String({ description: "Código del proyecto" })),
@@ -2595,7 +2596,7 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
       const pmDbPath = process.env.FABRIC_DIR ? `${process.env.FABRIC_DIR}/projects.sqlite` : "/tmp/fabric-agents/projects.sqlite";
       const db = initPmDb(pmDbPath);
       const mode = params.mode === "commit" ? "commit" : "preview";
-      const behavior = params.behavior === "create_and_kickoff" ? "create_and_kickoff" : "create_only";
+      const behavior = normalizeTaskIntakeBehavior(params.behavior);
 
       const input = {
         title: params.title,
@@ -2639,6 +2640,52 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
           if (existsSync(candidate)) return candidate;
         }
         return null;
+      };
+
+      const buildKickoffAcceptanceCriteria = (taskId: number, explicitCriteria: string[] | undefined) => {
+        const criteria = (explicitCriteria ?? []).map((item) => String(item).trim()).filter(Boolean);
+        const kickoffCriteria: Array<{
+          id: string;
+          description: string;
+          type: string;
+          params: Record<string, unknown>;
+          required: boolean;
+        }> = [
+          {
+            id: "task-context-loaded",
+            description: `Load PM context and local repository state for task ${taskId} before delegating implementation work.`,
+            type: "manual",
+            params: {
+              instructions: `Read task ${taskId} PM context and use the assigned worktree/session metadata already persisted for this task.`,
+            },
+            required: true,
+          },
+        ];
+
+        if (criteria.length === 0) {
+          kickoffCriteria.push({
+            id: "task-scope-owned",
+            description: `Own and complete task ${taskId} according to the title and description in the PM record.`,
+            type: "manual",
+            params: {
+              instructions: `Drive task ${taskId} to a terminal outcome in the assigned worktree and report completion or blockage to the coordinator.`,
+            },
+            required: true,
+          });
+          return kickoffCriteria;
+        }
+
+        return kickoffCriteria.concat(
+          criteria.map((criterion, index) => ({
+            id: `task-ac-${index + 1}`,
+            description: criterion,
+            type: "manual",
+            params: {
+              instructions: `Satisfy this task acceptance criterion while coordinating task ${taskId}: ${criterion}`,
+            },
+            required: true,
+          }))
+        );
       };
 
       try {
@@ -2781,6 +2828,7 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
           `--agent-id=${kickoffAgentId}`,
           `--mode=interactive`,
           `--session=${kickoffSession}`,
+          `--task-id=${created.task.id}`,
           `--workspace-dir=${worktreePath}`,
           `--report-to=${launchReportTo}`,
           `--parent-agent-id=${parentAgentId}`,
@@ -2792,15 +2840,60 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
         const logFd = openSync(logPath, "a");
         let launcherPid: number | undefined;
         try {
+          const launchEnv = { ...process.env, ENABLE_CMD_CENTER: "TRUE" };
+          delete launchEnv.TMUX;
           const proc = spawn(cmdParts[0], cmdParts.slice(1), {
             detached: true,
             stdio: ["ignore", logFd, logFd],
-            env: { ...process.env, ENABLE_CMD_CENTER: "TRUE" },
+            env: launchEnv,
           });
           proc.unref();
           launcherPid = proc.pid;
         } finally {
           closeSync(logFd);
+        }
+
+        const kickoffTaskContext = buildTaskContextForAgent(
+          created.task.id,
+          [
+            `kickoff_task_id: ${created.task.id}`,
+            `kickoff_title: ${created.task.title}`,
+            `kickoff_report_to: ${launchReportTo}`,
+            `kickoff_repo_local_path: ${validatedRepoPath}`,
+            `kickoff_worktree_path: ${worktreePath}`,
+            `kickoff_tmux_session: ${kickoffSession}`,
+            `kickoff_sub_agent_id: ${kickoffAgentId}`,
+          ].join("\n")
+        );
+        const kickoffAcceptanceCriteria = buildKickoffAcceptanceCriteria(created.task.id, input.acceptance_criteria);
+        const kickoffContractPayload: Record<string, unknown> = {
+          description: `Own task ${created.task.id} in the assigned worktree. Load PM context, coordinate execution, and report the terminal outcome to ${launchReportTo}.`,
+          acceptance_criteria: kickoffAcceptanceCriteria,
+          report_to: launchReportTo,
+          report_to_when_done: launchReportTo,
+          files: [worktreePath],
+          task_id: String(created.task.id),
+          title: created.task.title,
+          task_description: created.task.description ?? null,
+          task_context: kickoffTaskContext,
+          kickoff: {
+            repo_local_path: validatedRepoPath,
+            worktree_path: worktreePath,
+            tmux_session: kickoffSession,
+            orchestrator_agent_id: kickoffAgentId,
+          },
+        };
+        const kickoffContractSent = sendMessage(kickoffAgentId, {
+          message_id: randomUUID(),
+          from: AGENT_ID || "anonymous",
+          to: kickoffAgentId,
+          type: "contract",
+          payload: kickoffContractPayload,
+          timestamp: new Date().toISOString(),
+        });
+        const kickoffWarnings = [...created.plan.warnings];
+        if (!kickoffContractSent) {
+          kickoffWarnings.push("Initial kickoff contract could not be queued to the sub-coordinator mailbox.");
         }
 
         updateStatus(db, {
@@ -2827,10 +2920,11 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
           `worktree_path=${worktreePath}`,
           `tmux_session=${kickoffSession}`,
           `orchestrator_agent_id=${kickoffAgentId}`,
+          `kickoff_contract_sent=${String(kickoffContractSent)}`,
           `launcher_pid=${launcherPid ?? "null"}`,
           `launch_log=${logPath}`,
           `analysis_id=${created.analysis?.id ?? "null"}`,
-          `warnings=${created.plan.warnings.join(" | ") || "none"}`,
+          `warnings=${kickoffWarnings.join(" | ") || "none"}`,
         ].join("\n");
 
         return {
@@ -2843,9 +2937,12 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
               worktree_path: worktreePath,
               tmux_session: kickoffSession,
               orchestrator_agent_id: kickoffAgentId,
+              kickoff_contract_sent: kickoffContractSent,
+              kickoff_contract_payload: kickoffContractPayload,
               launcher_pid: launcherPid ?? null,
               launch_log: logPath,
             },
+            warnings: kickoffWarnings,
           },
         };
       } catch (err: any) {

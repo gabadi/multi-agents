@@ -148,6 +148,22 @@ Deterministic task lifecycle workflow:
 7. PM metadata cleanup: `pm_cleanup_task`
 8. Optional project archive: `pm_archive_project`
 
+Default coordinator task-intake policy:
+1. Unless the human explicitly asks for create_only, backlog-only, or no delegation, a newly created task should be treated as kickoff-intent work.
+2. Kickoff-intent means the coordinator should create a dedicated worktree/workspace and launch a dedicated sub-coordinator for the task.
+3. The coordinator should ask only the minimum blocking question needed to create that space safely, for example missing repo path confirmation or ambiguity about the target repo/project.
+4. Do not stop at "task row created" if the human intent is clearly to start the initiative. Creating the space and assigning the sub-coordinator is part of task creation by default.
+5. If the product/tooling cannot yet do this in one command, the coordinator must still complete the full sequence manually: create task, create worktree, launch sub-coordinator, persist task metadata, and hand off context.
+
+Default task-start sequence for new work:
+1. Resolve project with `pm_get_project_context`.
+2. Preview the task with `pm_create_task_intelligent mode=preview` if blockers are possible.
+3. Create the task with kickoff intent.
+4. Create a dedicated worktree/workspace.
+5. Launch `sub-boss-<task_id>` (or equivalent dedicated sub-coordinator) in its own tmux session.
+6. Persist worktree/session/orchestrator metadata in PM.
+7. Send the task contract and context to the sub-coordinator.
+
 Deterministic closeout order:
 1. Receive worker completion.
 2. Inspect task state with `pm_get_task`.

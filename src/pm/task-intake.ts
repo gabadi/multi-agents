@@ -4,6 +4,8 @@ import { generateBranchName } from "./worktree.js";
 import { buildProjectContextSnapshot, resolveProjectSelector, type ProjectContextInput } from "./project-context.js";
 import type { TaskRow } from "./queries.js";
 
+export type TaskIntakeBehavior = "create_only" | "create_and_kickoff";
+
 export type TaskIntakeInput = ProjectContextInput & {
   title: string;
   description?: string;
@@ -14,7 +16,7 @@ export type TaskIntakeInput = ProjectContextInput & {
   orchestrator_agent_id?: string;
   status?: string;
   base_branch?: string;
-  behavior?: "create_only" | "create_and_kickoff";
+  behavior?: TaskIntakeBehavior;
   confirm_repo_local_path?: string;
 };
 
@@ -41,7 +43,7 @@ export type TaskCreationPlan = {
   sequence_order: number | null;
   suggested_branch_name: string | null;
   base_branch: string;
-  behavior: "create_only" | "create_and_kickoff";
+  behavior: TaskIntakeBehavior;
   warnings: string[];
   blockers: string[];
   requires_confirmation: boolean;
@@ -64,6 +66,20 @@ function normalize(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+export function normalizeTaskIntakeBehavior(value: string | null | undefined): TaskIntakeBehavior {
+  const normalized = normalize(value)?.toLowerCase();
+  if (
+    normalized === "create_only" ||
+    normalized === "backlog_only" ||
+    normalized === "backlog-only" ||
+    normalized === "no_kickoff" ||
+    normalized === "no-kickoff"
+  ) {
+    return "create_only";
+  }
+  return "create_and_kickoff";
 }
 
 function nextTaskId(db: DatabaseSync): number {
@@ -94,7 +110,7 @@ function buildKickoffPlan(input: TaskIntakeInput, options: {
   suggestedBranchName: string | null;
   projectRepoLocalPath: string | null;
 }): TaskKickoffPlan {
-  const requested = (input.behavior ?? "create_only") === "create_and_kickoff";
+  const requested = normalizeTaskIntakeBehavior(input.behavior) === "create_and_kickoff";
   const confirmedRepoLocalPath = normalize(input.confirm_repo_local_path);
   const existingRepoLocalPath = normalize(options.projectRepoLocalPath);
   const proposedRepoLocalPath = deriveSuggestedRepoLocalPath(input);
@@ -235,7 +251,7 @@ export function planTaskCreation(db: DatabaseSync, input: TaskIntakeInput): Task
     throw new Error("title is required");
   }
 
-  const behavior = input.behavior ?? "create_only";
+  const behavior = normalizeTaskIntakeBehavior(input.behavior);
   const resolution = resolveProjectSelector(db, input);
   const warnings = [...resolution.warnings];
   const blockers: string[] = [];

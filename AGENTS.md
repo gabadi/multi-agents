@@ -70,6 +70,8 @@ If this variable is missing, Fabric commands and tools will not be available.
 4. Keep mailbox traffic compact and machine-oriented.
 5. Do not replace SIGUSR1 wakeups with polling.
 6. Prefer environment variables over hardcoded paths.
+7. New implementation/investigation tasks should default to kickoff intent: create a dedicated worktree/workspace and assign a dedicated sub-coordinator unless the human explicitly asks for create-only/backlog-only behavior.
+8. If a blocking clarification is needed for kickoff, ask the minimum necessary question, then continue with workspace creation and sub-coordinator launch.
 
 ## Recommended startup flow
 

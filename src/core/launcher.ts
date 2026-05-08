@@ -48,6 +48,7 @@ function parseArgs(): {
   skillPath: string | null;
   profile: import("./skill-loader.js").SkillProfile;
   parentAgentId?: string;
+  taskId?: string;
   workspaceDir?: string;
   reportTo?: string;
   workspaceSkills: string[];
@@ -64,7 +65,7 @@ function parseArgs(): {
   const role = get("--role");
   if (!role) {
     const available = listAvailableRoles();
-    console.error("Usage: npx tsx src/core/launcher.ts --role=<role> [--agent-id=...] [--model=...] [--session=...] [--mode=interactive|rpc] [--parent-agent-id=...] [--workspace-dir=...] [--workspace-skills=a,b] [--no-workspace-skills] [--monitor] [--monitor-port=7474]");
+    console.error("Usage: npx tsx src/core/launcher.ts --role=<role> [--agent-id=...] [--model=...] [--session=...] [--mode=interactive|rpc] [--parent-agent-id=...] [--task-id=...] [--workspace-dir=...] [--workspace-skills=a,b] [--no-workspace-skills] [--monitor] [--monitor-port=7474]");
     console.error(`Available roles (from skills/): ${available.join(", ") || "none found"}`);
     process.exit(1);
   }
@@ -97,6 +98,7 @@ function parseArgs(): {
     skillPath: getSkillPath(role),
     profile,
     parentAgentId: get("--parent-agent-id"),
+    taskId: get("--task-id") ?? process.env.FABRIC_TASK_ID,
     workspaceDir: get("--workspace-dir"),
     reportTo: get("--report-to") ?? get("--parent-agent-id") ?? process.env.FABRIC_REPORT_TO,
     workspaceSkills: (get("--workspace-skills") ?? process.env.FABRIC_WORKSPACE_SKILLS ?? "")
@@ -295,7 +297,7 @@ function launchMonitor(port: number) {
 
 async function main() {
   initRuntimeLayout();
-  const { monitor, monitorPort, role, agentId, model, session, mode, skillPath, profile, parentAgentId, workspaceDir, reportTo, workspaceSkills, noWorkspaceSkills } = parseArgs();
+  const { monitor, monitorPort, role, agentId, model, session, mode, skillPath, profile, parentAgentId, taskId, workspaceDir, reportTo, workspaceSkills, noWorkspaceSkills } = parseArgs();
 
   if (monitor) {
     launchMonitor(monitorPort);
@@ -307,6 +309,9 @@ async function main() {
   console.log(`[launcher] Launching agent ${agentId} (role=${role}, mode=${mode}, session=${session})`);
   if (parentAgentId) {
     console.log(`[launcher] Parent agent: ${parentAgentId} (federated sub-coordinator)`);
+  }
+  if (taskId) {
+    console.log(`[launcher] Task ID: ${taskId}`);
   }
   if (workspaceDir) {
     console.log(`[launcher] Workspace dir: ${workspaceDir}`);
@@ -357,6 +362,7 @@ async function main() {
     PI_TELEGRAM_AUTO_CONNECT: "",
     // Federated sub-coordinator context
     ...(parentAgentId ? { FABRIC_PARENT_AGENT_ID: parentAgentId } : {}),
+    ...(taskId ? { FABRIC_TASK_ID: taskId } : {}),
     ...(workspaceDir ? { FABRIC_WORKSPACE_DIR: workspaceDir } : {}),
     ...(workspaceSkills.length > 0 ? { FABRIC_WORKSPACE_SKILLS: workspaceSkills.join(",") } : {}),
     ...(noWorkspaceSkills ? { FABRIC_NO_WORKSPACE_SKILLS: "TRUE" } : {}),

@@ -261,8 +261,8 @@ export function buildProjectContextSnapshot(db: DatabaseSync, input: ProjectCont
   if (!resolution.project.repo_local_path) {
     recommendedNextActions.push(
       runtimeRepoCandidate
-        ? `Project is missing repo_local_path. For create_and_kickoff use confirm_repo_local_path=${runtimeRepoCandidate} to persist it explicitly.`
-        : "Provide or confirm repo_local_path before any create_and_kickoff workflow."
+        ? `Project is missing repo_local_path. Task creation defaults to kickoff intent, so use confirm_repo_local_path=${runtimeRepoCandidate} to persist it explicitly or set behavior=create_only for backlog-only creation.`
+        : "Provide or confirm repo_local_path before kickoff-intent task creation, or set behavior=create_only for backlog-only creation."
     );
   }
   if (resolution.ambiguous) {
