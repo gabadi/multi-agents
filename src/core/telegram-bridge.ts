@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   interpretMessage,
   type ActiveCoordinatorSnapshot,
@@ -13,7 +14,16 @@ import {
   type TelegramRoutingIntent,
 } from "./telegram-nlu.js";
 
-const CONFIG_PATH = join(homedir(), ".pi", "agent", "telegram-config.json");
+const DEFAULT_CONFIG_PATH = join(homedir(), ".pi", "agent", "telegram-config.json");
+const DEFAULT_LOCAL_CONFIG_PATH = join(dirname(fileURLToPath(import.meta.url)), "telegram.local.json");
+
+function getConfigPath(): string {
+  return process.env.TELEGRAM_CONFIG_PATH || DEFAULT_CONFIG_PATH;
+}
+
+function getLocalConfigPath(): string {
+  return process.env.TELEGRAM_LOCAL_CONFIG_PATH || DEFAULT_LOCAL_CONFIG_PATH;
+}
 
 function getFabricDir(): string {
   return process.env.FABRIC_DIR || "/tmp/fabric-agents";
@@ -164,10 +174,10 @@ export function auditTelegramDelivery(event: TelegramDeliveryAuditEvent): void {
   appendTelegramDeliveryAudit(event);
 }
 
-export function readConfig(): TelegramConfig {
-  if (!existsSync(CONFIG_PATH)) return {};
+function readConfigFile(path: string): TelegramConfig {
+  if (!existsSync(path)) return {};
   try {
-    const file = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as TelegramConfig;
+    const file = JSON.parse(readFileSync(path, "utf8")) as TelegramConfig;
     const config: TelegramConfig = {};
 
     if (typeof file.botToken === "string" && file.botToken.trim()) {
@@ -182,6 +192,16 @@ export function readConfig(): TelegramConfig {
   } catch {
     return {};
   }
+}
+
+export function readConfig(): TelegramConfig {
+  const persistedConfig = readConfigFile(getConfigPath());
+  const localConfig = readConfigFile(getLocalConfigPath());
+
+  return {
+    ...persistedConfig,
+    ...localConfig,
+  };
 }
 
 export async function tgGetUpdates(

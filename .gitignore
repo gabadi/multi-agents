@@ -12,3 +12,6 @@ data/
 plans/
 docs/
 lessons/
+
+# local-only Telegram overrides
+src/core/telegram.local.json

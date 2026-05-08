@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   getChatSession,
   handleTelegramCommand,
   processTelegramMessage,
+  readConfig,
   resetTelegramBridgeStateForTests,
   tgSendMessage,
   type AgentInfo,
@@ -25,6 +26,8 @@ describe("telegram bridge routing", () => {
   const originalFabricDir = process.env.FABRIC_DIR;
   const originalFernApiKey = process.env.FERN_API_KEY;
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalTelegramConfigPath = process.env.TELEGRAM_CONFIG_PATH;
+  const originalTelegramLocalConfigPath = process.env.TELEGRAM_LOCAL_CONFIG_PATH;
 
   const activeCoordinators: AgentInfo[] = [
     { agent_id: "boss", role: "coordinator", fabric_status: "idle", current_task: null },
@@ -72,6 +75,10 @@ describe("telegram bridge routing", () => {
     else process.env.FERN_API_KEY = originalFernApiKey;
     if (originalOpenAiApiKey == null) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    if (originalTelegramConfigPath == null) delete process.env.TELEGRAM_CONFIG_PATH;
+    else process.env.TELEGRAM_CONFIG_PATH = originalTelegramConfigPath;
+    if (originalTelegramLocalConfigPath == null) delete process.env.TELEGRAM_LOCAL_CONFIG_PATH;
+    else process.env.TELEGRAM_LOCAL_CONFIG_PATH = originalTelegramLocalConfigPath;
     resetTelegramBridgeStateForTests();
     if (baseDir) rmSync(baseDir, { recursive: true, force: true });
     baseDir = "";
@@ -168,6 +175,25 @@ describe("telegram bridge routing", () => {
       fetchCalls.some((call) => String(call.body.text || "").includes("queued for sub-boss-36")),
       "router_queued confirmation should mention the selected coordinator"
     );
+  });
+
+  test("readConfig merges persisted config with local gitignored override", () => {
+    const persistedConfigPath = join(baseDir, "telegram-config.json");
+    const localConfigPath = join(baseDir, "telegram.local.json");
+
+    writeFileSync(
+      persistedConfigPath,
+      JSON.stringify({ botToken: "persisted-token", allowedUserId: 12345 }, null, 2)
+    );
+    writeFileSync(localConfigPath, JSON.stringify({ botToken: "local-token" }, null, 2));
+
+    process.env.TELEGRAM_CONFIG_PATH = persistedConfigPath;
+    process.env.TELEGRAM_LOCAL_CONFIG_PATH = localConfigPath;
+
+    assert.deepStrictEqual(readConfig(), {
+      botToken: "local-token",
+      allowedUserId: 12345,
+    });
   });
 
   test("tgSendMessage posts to Telegram chat and returns Telegram metadata", async () => {
