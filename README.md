@@ -361,6 +361,64 @@ Typical contents:
 
 This makes the system easy to debug with normal shell tools.
 
+### Deterministic coordinator runtime workflow
+
+For day-to-day coordination, prefer the built-in Fabric tools over ad-hoc `sqlite3`, `tail`, or mailbox greps:
+
+1. `fabric_refresh_runtime`
+   - self-refresh the current agent runtime registration
+   - rewrites pid/mailbox/state handles deterministically
+   - upserts the current agent row in `registry.sqlite`
+   - emits `agent.runtime_refreshed` in `runtime-events.jsonl`
+2. `fabric_get_runtime_snapshot`
+   - returns a structured registry/runtime snapshot
+   - includes mailbox/state/output handles per agent
+   - can include recent runtime events for the selected agents
+3. `fabric_get_log_snapshot`
+   - returns deterministic handles for agent outputs, mailboxes, runtime events, and `monitor.log`
+   - avoids long manual `tail`, `grep`, and JSONL inspection loops
+
+Recommended coordinator flow:
+
+```text
+refresh current agent runtime
+→ get runtime snapshot for the target agents/session
+→ get log snapshot only for the agents/sources you need
+```
+
+Use `fabric_list_agents` when you only need a lightweight roster, and the snapshot tools when the decision needs durable handles and less manual querying.
+
+### Deterministic PM task lifecycle workflow
+
+Prefer the built-in PM tools over direct `sqlite3` updates:
+
+1. Creation
+   - `pm_get_project_context`
+   - `pm_create_task_intelligent mode=preview`
+   - `pm_create_task_intelligent mode=commit`
+2. Inspection
+   - `pm_list_tasks`
+   - `pm_get_task`
+3. Closeout
+   - `pm_set_task_pr`
+   - `pm_update_task_status`
+   - `pm_cleanup_task`
+   - optional `pm_archive_project`
+
+Recommended closeout sequence:
+
+```text
+worker completion received
+→ pm_get_task
+→ pm_set_task_pr
+→ pm_update_task_status(completed|failed)
+→ pm_cleanup_task
+→ optional physical git worktree removal
+→ optional pm_archive_project
+```
+
+Note: task status `completed` is only valid when `pr_merged_at` is already set.
+
 ---
 
 ## Common commands

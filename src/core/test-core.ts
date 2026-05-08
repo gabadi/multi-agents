@@ -26,6 +26,13 @@ import {
   cleanupChildAgentResources,
   shouldAutoCleanupCompletedRpcWorker,
 } from "./rpc-worker-cleanup.js";
+import {
+  buildReviewerGateContracts,
+  buildReviewerGateRetryRequest,
+  getReviewerGateAutoCleanupDirective,
+  isReviewerGateRetryAllowed,
+  parseReviewerGateRetryRequest,
+} from "./reviewer-gate-protocol.js";
 
 const FABRIC_DIR = mkdtempSync(join(tmpdir(), "fabric-agents-test-"));
 const REGISTRY_DB = join(FABRIC_DIR, "registry.sqlite");
@@ -324,6 +331,115 @@ function runRpcWorkerCleanupTests() {
   console.log("[test] RPC worker cleanup OK");
 }
 
+function runReviewerGateProtocolTests() {
+  console.log("[test] Reviewer gate...");
+
+  const contracts = buildReviewerGateContracts({
+    phase_id: "phase-dev-review-33",
+    phase_label: "dev+reviewer",
+    task_id: "task-33-reviewer-gated-single-retry",
+    coordinator_agent_id: "boss",
+    final_report_to: "boss",
+    implementation_agent_id: "dev-33",
+    implementation_role: "dev",
+    implementation_mode: "rpc",
+    reviewer_agent_id: "reviewer-33",
+    reviewer_role: "reviewer",
+    reviewer_mode: "rpc",
+    implementation_description: "Implement the assigned phase and report terminal completion to reviewer-33.",
+    acceptance_criteria: [
+      {
+        id: "c1",
+        description: "Tests pass",
+        type: "test_passes",
+        params: { command: "npm test" },
+        required: true,
+      },
+    ],
+    files: ["src/core/extension.ts"],
+  });
+
+  if (contracts.implementation_contract.report_to_when_done !== "reviewer-33") {
+    throw new Error("Reviewer gate implementation lane did not route terminal report to reviewer");
+  }
+  if (contracts.reviewer_contract.report_to_when_done !== "boss") {
+    throw new Error("Reviewer gate reviewer lane did not route terminal report to coordinator");
+  }
+  if (contracts.implementation_contract.reviewer_gate.lane !== "implementation") {
+    throw new Error("Reviewer gate implementation contract missing implementation lane metadata");
+  }
+  if (contracts.reviewer_contract.reviewer_gate.lane !== "reviewer") {
+    throw new Error("Reviewer gate reviewer contract missing reviewer lane metadata");
+  }
+  if (contracts.implementation_contract.reviewer_gate.max_implementation_attempts !== 2) {
+    throw new Error("Reviewer gate did not enforce exactly one retry (max attempts must be 2)");
+  }
+  if (!contracts.reviewer_contract.description.includes("allow exactly one retry")) {
+    throw new Error("Reviewer gate reviewer contract did not encode the single-retry policy");
+  }
+
+  const implementationDirective = getReviewerGateAutoCleanupDirective({
+    reporterAgentId: "dev-33",
+    status: "done",
+    reviewerGate: contracts.implementation_contract.reviewer_gate,
+  });
+  if (!implementationDirective.skipReporterCleanup) {
+    throw new Error("Reviewer gate implementation completion should defer auto-cleanup until reviewer verdict");
+  }
+  if (implementationDirective.reason !== "awaiting_reviewer_gate_verdict") {
+    throw new Error("Reviewer gate implementation cleanup defer reason mismatch");
+  }
+  if (implementationDirective.additionalCleanupTargets.length !== 0) {
+    throw new Error("Reviewer gate implementation completion should not schedule additional cleanup targets");
+  }
+
+  const reviewerDirective = getReviewerGateAutoCleanupDirective({
+    reporterAgentId: "reviewer-33",
+    status: "failed",
+    reviewerGate: contracts.reviewer_contract.reviewer_gate,
+  });
+  if (reviewerDirective.skipReporterCleanup) {
+    throw new Error("Reviewer gate reviewer terminal outcome should not skip reporter cleanup");
+  }
+  if (reviewerDirective.additionalCleanupTargets[0]?.agentId !== "dev-33") {
+    throw new Error("Reviewer gate reviewer terminal outcome should schedule implementation cleanup");
+  }
+
+  if (!isReviewerGateRetryAllowed({
+    reviewerGate: contracts.reviewer_contract.reviewer_gate,
+    implementationAttempt: 1,
+  })) {
+    throw new Error("Reviewer gate did not allow retry after first failed review");
+  }
+  if (isReviewerGateRetryAllowed({
+    reviewerGate: contracts.reviewer_contract.reviewer_gate,
+    implementationAttempt: 2,
+  })) {
+    throw new Error("Reviewer gate incorrectly allowed more than one retry");
+  }
+
+  const retryRequest = buildReviewerGateRetryRequest({
+    reviewerGate: contracts.reviewer_contract.reviewer_gate,
+    implementationAttempt: 1,
+    findings: "Fix the failing assertion and rerun the focused tests.",
+  });
+  const parsedRetryRequest = parseReviewerGateRetryRequest(retryRequest.reviewer_gate_retry);
+  if (!parsedRetryRequest) {
+    throw new Error("Reviewer gate retry request could not be parsed");
+  }
+  if (parsedRetryRequest.next_attempt !== 2) {
+    throw new Error("Reviewer gate retry request did not advance to the final attempt");
+  }
+  if (!retryRequest.text.includes("This is the only retry allowed for this phase.")) {
+    throw new Error("Reviewer gate retry request text did not encode the single-retry rule");
+  }
+  if (!retryRequest.text.includes("report_to_after_retry: reviewer-33")) {
+    throw new Error("Reviewer gate retry request did not preserve reviewer routing");
+  }
+
+  console.log("[test] Reviewer gate OK");
+}
+
 async function runTest() {
   console.log(`[test] Using isolated FABRIC_DIR=${FABRIC_DIR}`);
   initDb();
@@ -389,6 +505,7 @@ async function runTest() {
 
   runTelegramRoutingValidationTests();
   runRpcWorkerCleanupTests();
+  runReviewerGateProtocolTests();
 
   console.log("[test] All core tests passed!");
 }

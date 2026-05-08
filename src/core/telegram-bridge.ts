@@ -3,9 +3,9 @@
  * Zero external deps. Node builtins + fetch only.
  */
 
-import { existsSync, readFileSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   interpretMessage,
   type ActiveCoordinatorSnapshot,
@@ -14,10 +14,26 @@ import {
 } from "./telegram-nlu.js";
 
 const CONFIG_PATH = join(homedir(), ".pi", "agent", "telegram-config.json");
-const MAILBOX_DIR = "/tmp/fabric-agents/mailboxes";
-const PID_DIR = "/tmp/fabric-agents/pids";
 
-const TELEGRAM_DELIVERIES_LOG = "/tmp/fabric-agents/telegram-deliveries.jsonl";
+function getFabricDir(): string {
+  return process.env.FABRIC_DIR || "/tmp/fabric-agents";
+}
+
+function getMailboxDir(): string {
+  return join(getFabricDir(), "mailboxes");
+}
+
+function getPidDir(): string {
+  return join(getFabricDir(), "pids");
+}
+
+function getTelegramDeliveriesLogPath(): string {
+  return join(getFabricDir(), "telegram-deliveries.jsonl");
+}
+
+function getTelegramSessionsPath(): string {
+  return join(getFabricDir(), "telegram-sessions.json");
+}
 
 interface PendingRequest {
   requestId: string;
@@ -74,8 +90,10 @@ export interface ChatSession {
 
 function appendTelegramDeliveryAudit(event: TelegramDeliveryAuditEvent): void {
   try {
+    const logPath = getTelegramDeliveriesLogPath();
+    mkdirSync(dirname(logPath), { recursive: true });
     appendFileSync(
-      TELEGRAM_DELIVERIES_LOG,
+      logPath,
       JSON.stringify({
         ts: new Date().toISOString(),
         source: "telegram-bridge",
@@ -245,8 +263,60 @@ export async function tgSendMessage(
 }
 
 const chatSessions = new Map<number, ChatSession>();
+let sessionsLoaded = false;
+
+function loadChatSessions(): void {
+  if (sessionsLoaded) return;
+  sessionsLoaded = true;
+
+  const path = getTelegramSessionsPath();
+  if (!existsSync(path)) return;
+
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (!Array.isArray(raw)) return;
+
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const session = item as Partial<ChatSession>;
+      const chatId = Number(session.chatId);
+      if (!Number.isFinite(chatId) || chatId <= 0) continue;
+      chatSessions.set(chatId, {
+        chatId,
+        userId: typeof session.userId === "number" ? session.userId : undefined,
+        activeCoordinatorId: typeof session.activeCoordinatorId === "string" && session.activeCoordinatorId.trim()
+          ? session.activeCoordinatorId.trim()
+          : "boss",
+        mode: session.mode === "buffer" || session.mode === "approval" ? session.mode : "streaming",
+        lastActivity: typeof session.lastActivity === "string" && session.lastActivity
+          ? session.lastActivity
+          : new Date().toISOString(),
+      });
+    }
+  } catch {
+    // Ignore corrupt session files; runtime state can be rebuilt.
+  }
+}
+
+function persistChatSessions(): void {
+  try {
+    const path = getTelegramSessionsPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(Array.from(chatSessions.values()), null, 2), "utf8");
+  } catch {
+    // best effort; routing should still function in-memory.
+  }
+}
+
+function touchSession(session: ChatSession): ChatSession {
+  session.lastActivity = new Date().toISOString();
+  persistChatSessions();
+  return session;
+}
 
 export function getChatSession(chatId: number, userId?: number): ChatSession {
+  loadChatSessions();
+
   if (!chatSessions.has(chatId)) {
     chatSessions.set(chatId, {
       chatId,
@@ -255,14 +325,25 @@ export function getChatSession(chatId: number, userId?: number): ChatSession {
       mode: "streaming",
       lastActivity: new Date().toISOString(),
     });
+    persistChatSessions();
   }
+
   const session = chatSessions.get(chatId)!;
-  session.lastActivity = new Date().toISOString();
-  return session;
+  if (userId != null && session.userId == null) {
+    session.userId = userId;
+  }
+  return touchSession(session);
 }
 
 export function getAllSessions(): ChatSession[] {
+  loadChatSessions();
   return Array.from(chatSessions.values());
+}
+
+export function resetTelegramBridgeStateForTests(): void {
+  pendingRequests.clear();
+  chatSessions.clear();
+  sessionsLoaded = false;
 }
 
 export function getActiveCoordinators(agents: AgentInfo[]): ActiveCoordinatorSnapshot[] {
@@ -354,10 +435,13 @@ export function forwardToValidatedCoordinator(
   };
 
   try {
-    const mboxPath = `${MAILBOX_DIR}/${coordinatorId}.jsonl`;
+    const mailboxDir = getMailboxDir();
+    mkdirSync(mailboxDir, { recursive: true });
+    const mboxPath = `${mailboxDir}/${coordinatorId}.jsonl`;
     appendFileSync(mboxPath, JSON.stringify(msg) + "\n");
 
-    const pidPath = `${PID_DIR}/${coordinatorId}.pid`;
+    const pidDir = getPidDir();
+    const pidPath = `${pidDir}/${coordinatorId}.pid`;
     if (existsSync(pidPath)) {
       const pid = Number(readFileSync(pidPath, "utf8").trim());
       if (pid > 0) {
@@ -403,9 +487,12 @@ export function forwardToCoordinator(
   };
 
   try {
-    const mboxPath = `${MAILBOX_DIR}/${coordinatorId}.jsonl`;
+    const mailboxDir = getMailboxDir();
+    mkdirSync(mailboxDir, { recursive: true });
+    const mboxPath = `${mailboxDir}/${coordinatorId}.jsonl`;
     appendFileSync(mboxPath, JSON.stringify(msg) + "\n");
-    const pidPath = `${PID_DIR}/${coordinatorId}.pid`;
+    const pidDir = getPidDir();
+    const pidPath = `${pidDir}/${coordinatorId}.pid`;
     if (existsSync(pidPath)) {
       const pid = Number(readFileSync(pidPath, "utf8").trim());
       if (pid > 0) {
@@ -505,9 +592,9 @@ export async function processTelegramMessage(
   }
 
   const session = getChatSession(chatId, userId);
-  const targetId = intent.intended_coordinator_id
-    || session.activeCoordinatorId
-    || defaultCoordinator;
+  const targetId = intent.monitor_action === "route" && intent.intended_coordinator_id
+    ? intent.intended_coordinator_id
+    : (session.activeCoordinatorId || intent.intended_coordinator_id || defaultCoordinator);
 
   const routeCheck = validateCoordinatorRoute(targetId, activeCoordinators);
   if (!routeCheck.ok) {
@@ -521,6 +608,7 @@ export async function processTelegramMessage(
   }
 
   session.activeCoordinatorId = routeCheck.coordinator.agent_id;
+  touchSession(session);
 
   const requestId = forwardToValidatedCoordinator(
     routeCheck.coordinator.agent_id,
@@ -614,18 +702,21 @@ export async function handleTelegramCommand(
 
   if (lower === "/mode streaming") {
     session.mode = "streaming";
+    touchSession(session);
     await tgSendMessage(token, chatId, "Mode: streaming", { replyTo: messageId });
     return "handled";
   }
 
   if (lower === "/mode buffer") {
     session.mode = "buffer";
+    touchSession(session);
     await tgSendMessage(token, chatId, "Mode: buffer", { replyTo: messageId });
     return "handled";
   }
 
   if (lower === "/mode approval") {
     session.mode = "approval";
+    touchSession(session);
     await tgSendMessage(token, chatId, "Mode: approval", { replyTo: messageId });
     return "handled";
   }
@@ -642,6 +733,7 @@ export async function handleTelegramCommand(
       return "handled";
     }
     session.activeCoordinatorId = target;
+    touchSession(session);
     await tgSendMessage(token, chatId, `Routing switched to: ${target}`, { replyTo: messageId });
     return "handled";
   }
@@ -653,6 +745,7 @@ export async function handleTelegramCommand(
 
   if (lower === "/boss") {
     session.activeCoordinatorId = "boss";
+    touchSession(session);
     await tgSendMessage(token, chatId, "Routing switched to: boss", { replyTo: messageId });
     return "handled";
   }

@@ -6,10 +6,19 @@
  */
 
 // ── Config ──
-const FERN_API_KEY = process.env.FERN_API_KEY || process.env.OPENAI_API_KEY || "";
-const FERN_BASE_URL = process.env.FERN_BASE_URL || "https://api.fern.dev/v1";
+function getFernApiKey(): string {
+  return process.env.FERN_API_KEY || process.env.OPENAI_API_KEY || "";
+}
+
+function getFernBaseUrl(): string {
+  return process.env.FERN_BASE_URL || "https://api.fern.dev/v1";
+}
+
 const LLM_TIMEOUT_MS = 8000;
-const NLU_MODEL = process.env.FERN_NLU_MODEL || "fern/gpt-4o-mini";
+
+function getNluModel(): string {
+  return process.env.FERN_NLU_MODEL || "fern/gpt-4o-mini";
+}
 
 export interface ActiveCoordinatorSnapshot {
   agent_id: string;
@@ -250,10 +259,10 @@ function parseExplicitRouting(
 }
 
 async function callFernProxy(systemPrompt: string, userPrompt: string): Promise<string> {
-  const url = `${FERN_BASE_URL}/chat/completions`;
+  const url = `${getFernBaseUrl()}/chat/completions`;
 
   const body = {
-    model: NLU_MODEL,
+    model: getNluModel(),
     temperature: 0,
     max_tokens: 400,
     response_format: { type: "json_object" },
@@ -271,7 +280,7 @@ async function callFernProxy(systemPrompt: string, userPrompt: string): Promise<
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${FERN_API_KEY}`,
+        Authorization: `Bearer ${getFernApiKey()}`,
       },
       body: JSON.stringify(body),
       signal: controller.signal,
@@ -373,7 +382,7 @@ export async function interpretMessage(
     return explicit;
   }
 
-  if (FERN_API_KEY) {
+  if (getFernApiKey()) {
     try {
       const llm = await llmInterpret(rawMessage, activeCoordinators, activeProjects, defaultCoordinator);
       if (llm) return llm;

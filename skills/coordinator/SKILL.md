@@ -138,6 +138,26 @@ PM state lives in `/tmp/fabric-agents/projects.sqlite`.
 
 The coordinator may create top-level projects/tasks and assign owners, but task-local context belongs to the owning sub-coordinator. When creating a follow-up task from a previous task, prefer that the sub-coordinator or recovery sub-coordinator creates the context capsule and derived work records.
 
+Deterministic task lifecycle workflow:
+1. Project resolution: `pm_get_project_context`
+2. Task creation plan: `pm_create_task_intelligent mode=preview`
+3. Task creation/optional kickoff: `pm_create_task_intelligent mode=commit`
+4. Task inspection: `pm_list_tasks` and `pm_get_task`
+5. Task closeout data: `pm_set_task_pr`
+6. Task state transition: `pm_update_task_status`
+7. PM metadata cleanup: `pm_cleanup_task`
+8. Optional project archive: `pm_archive_project`
+
+Deterministic closeout order:
+1. Receive worker completion.
+2. Inspect task state with `pm_get_task`.
+3. Persist PR metadata with `pm_set_task_pr` before trying `completed`.
+4. Transition task with `pm_update_task_status`.
+5. Clear PM worktree/tmux metadata with `pm_cleanup_task`.
+6. Perform physical cleanup separately if needed.
+
+Rule: task status `completed` requires `pr_merged_at` to be non-null.
+
 ## Recovery Policy
 
 Only enter coordinator recovery mode if:
