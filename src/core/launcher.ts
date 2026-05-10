@@ -447,10 +447,14 @@ async function main() {
 
   // Write launch script to file (avoids ARG_MAX and quoting hell).
   // zsh -i will source ~/.zshrc automatically; we just set env vars and run pi.
+  // IMPORTANT: Prepend mise/volta node to PATH to avoid Homebrew node conflicts.
   const cmdFile = `${FABRIC_DIR}/launch-scripts/${agentId}.sh`;
   mkdirSync(`${FABRIC_DIR}/launch-scripts`, { recursive: true });
   const cdWorkspace = workspaceDir ? `cd ${shellQuote(workspaceDir)}\n` : "";
-  writeFileSync(cmdFile, `set -e\n${envExports}\n${cdWorkspace}exec ${piCmd}\n`, "utf8");
+  // Ensure mise/volta node is preferred over Homebrew node to avoid libsimdjson conflicts
+  const miseNodePath = `/Users/jescobar/.local/share/mise/installs/node/22.16.0/bin`;
+  const fixedPathExport = `export PATH=${shellQuote(miseNodePath)}:$PATH`;
+  writeFileSync(cmdFile, `set -e\n${fixedPathExport}\n${envExports}\n${cdWorkspace}exec ${piCmd}\n`, "utf8");
 
   // Find free pane or create new one — thread-safe via split-window -P -F
   // which returns pane_id directly, eliminating the race condition.
