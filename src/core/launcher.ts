@@ -48,7 +48,6 @@ function parseArgs(): {
   skillPath: string | null;
   profile: import("./skill-loader.js").SkillProfile;
   parentAgentId?: string;
-  taskId?: string;
   workspaceDir?: string;
   reportTo?: string;
   workspaceSkills: string[];
@@ -65,7 +64,7 @@ function parseArgs(): {
   const role = get("--role");
   if (!role) {
     const available = listAvailableRoles();
-    console.error("Usage: npx tsx src/core/launcher.ts --role=<role> [--agent-id=...] [--model=...] [--session=...] [--mode=interactive|rpc] [--parent-agent-id=...] [--task-id=...] [--workspace-dir=...] [--workspace-skills=a,b] [--no-workspace-skills] [--monitor] [--monitor-port=7474]");
+    console.error("Usage: npx tsx src/core/launcher.ts --role=<role> [--agent-id=...] [--model=...] [--session=...] [--mode=interactive|rpc] [--parent-agent-id=...] [--workspace-dir=...] [--workspace-skills=a,b] [--no-workspace-skills] [--monitor] [--monitor-port=7474]");
     console.error(`Available roles (from skills/): ${available.join(", ") || "none found"}`);
     process.exit(1);
   }
@@ -98,7 +97,6 @@ function parseArgs(): {
     skillPath: getSkillPath(role),
     profile,
     parentAgentId: get("--parent-agent-id"),
-    taskId: get("--task-id") ?? process.env.FABRIC_TASK_ID,
     workspaceDir: get("--workspace-dir"),
     reportTo: get("--report-to") ?? get("--parent-agent-id") ?? process.env.FABRIC_REPORT_TO,
     workspaceSkills: (get("--workspace-skills") ?? process.env.FABRIC_WORKSPACE_SKILLS ?? "")
@@ -111,6 +109,18 @@ function parseArgs(): {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function safeAgentFileName(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+function tailTextFile(path: string, maxLines = 40): string | null {
+  if (!existsSync(path)) return null;
+  const content = readFileSync(path, "utf8");
+  const lines = content.split(/\r?\n/).filter(Boolean);
+  if (lines.length === 0) return null;
+  return lines.slice(-maxLines).join("\n").trim() || null;
 }
 
 function tmuxExec(cmd: string): string {
@@ -297,7 +307,7 @@ function launchMonitor(port: number) {
 
 async function main() {
   initRuntimeLayout();
-  const { monitor, monitorPort, role, agentId, model, session, mode, skillPath, profile, parentAgentId, taskId, workspaceDir, reportTo, workspaceSkills, noWorkspaceSkills } = parseArgs();
+  const { monitor, monitorPort, role, agentId, model, session, mode, skillPath, profile, parentAgentId, workspaceDir, reportTo, workspaceSkills, noWorkspaceSkills } = parseArgs();
 
   if (monitor) {
     launchMonitor(monitorPort);
@@ -309,9 +319,6 @@ async function main() {
   console.log(`[launcher] Launching agent ${agentId} (role=${role}, mode=${mode}, session=${session})`);
   if (parentAgentId) {
     console.log(`[launcher] Parent agent: ${parentAgentId} (federated sub-coordinator)`);
-  }
-  if (taskId) {
-    console.log(`[launcher] Task ID: ${taskId}`);
   }
   if (workspaceDir) {
     console.log(`[launcher] Workspace dir: ${workspaceDir}`);
@@ -345,6 +352,7 @@ async function main() {
   }
 
   const target = `${targetSession}:${targetWindow}`;
+  const ackTimeoutMs = Math.max(1000, Number(process.env.FABRIC_ALIVE_ACK_TIMEOUT_MS || "45000") || 45000);
 
   // Build env exports for the launch script
   const envVars: Record<string, string> = {
@@ -362,7 +370,6 @@ async function main() {
     PI_TELEGRAM_AUTO_CONNECT: "",
     // Federated sub-coordinator context
     ...(parentAgentId ? { FABRIC_PARENT_AGENT_ID: parentAgentId } : {}),
-    ...(taskId ? { FABRIC_TASK_ID: taskId } : {}),
     ...(workspaceDir ? { FABRIC_WORKSPACE_DIR: workspaceDir } : {}),
     ...(workspaceSkills.length > 0 ? { FABRIC_WORKSPACE_SKILLS: workspaceSkills.join(",") } : {}),
     ...(noWorkspaceSkills ? { FABRIC_NO_WORKSPACE_SKILLS: "TRUE" } : {}),
@@ -447,6 +454,11 @@ async function main() {
 
   // Find free pane or create new one — thread-safe via split-window -P -F
   // which returns pane_id directly, eliminating the race condition.
+  const paneLogDir = `${FABRIC_DIR}/pane-logs`;
+  mkdirSync(paneLogDir, { recursive: true });
+  const paneLogPath = `${paneLogDir}/${safeAgentFileName(agentId)}-${Date.now()}.log`;
+  writeFileSync(paneLogPath, "", { flag: "a" });
+
   const freePane = findFreePane(targetSession, targetWindow);
   if (freePane) {
     // Reuse existing pane: respawn-pane kills old process and starts new one.
@@ -463,6 +475,19 @@ async function main() {
     );
     tmuxExec(`select-pane -T ${agentId} -t ${paneId}`);
     console.log(`[launcher] Created pane ${paneId}`);
+  }
+
+  try {
+    tmuxExec(`pipe-pane -t ${paneId}`);
+  } catch {
+    // ignore if there was no existing pipe to clear
+  }
+  try {
+    const pipeCommand = `cat >> ${shellQuote(paneLogPath)}`;
+    tmuxExec(`pipe-pane -o -t ${paneId} ${shellQuote(pipeCommand)}`);
+    console.log(`[launcher] Pane output log: ${paneLogPath}`);
+  } catch {
+    console.warn(`[launcher] Could not attach pane logger for ${paneId}`);
   }
 
   // Auto-reorganize all panes in this window for best layout
@@ -486,6 +511,7 @@ async function main() {
       mode,
       status: "launching",
       fabric_status: "agent_starting",
+      pane_log_path: paneLogPath,
     },
   });
 
@@ -498,7 +524,7 @@ async function main() {
 
   // Wait for alive ACK from the agent (sent by extension.ts on session_start)
   if (reportTo) {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + ackTimeoutMs;
     let ackReceived = false;
     const targetMailbox = `${FABRIC_DIR}/mailboxes/${reportTo}.jsonl`;
     const startSize = existsSync(targetMailbox) ? (statSync(targetMailbox).size || 0) : 0;
@@ -519,13 +545,25 @@ async function main() {
     if (ackReceived) {
       console.log(`[launcher] Agent ${agentId} ACK received. Ready for work.`);
     } else {
-      console.warn(`[launcher] WARNING: Agent ${agentId} did not send alive ACK within 20s. Killing pane and cleaning up.`);
+      console.warn(`[launcher] WARNING: Agent ${agentId} did not send alive ACK within ${ackTimeoutMs}ms. Killing pane and cleaning up.`);
       try {
         const paneLog = execSync(`tmux capture-pane -p -t ${paneId} -S -20`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-        console.warn(`[launcher] Last 20 lines from pane ${paneId}:\n${paneLog}`);
+        if (paneLog) {
+          console.warn(`[launcher] Last 20 lines from pane ${paneId}:\n${paneLog}`);
+        } else {
+          console.warn(`[launcher] Pane ${paneId} had no capturable output.`);
+        }
       } catch {
         console.warn(`[launcher] Could not capture pane ${paneId} for diagnostics.`);
       }
+
+      const paneLogTail = tailTextFile(paneLogPath, 40);
+      if (paneLogTail) {
+        console.warn(`[launcher] Tail of pane log ${paneLogPath}:\n${paneLogTail}`);
+      } else {
+        console.warn(`[launcher] Pane log empty or unavailable: ${paneLogPath}`);
+      }
+
       // Auto-kill stuck pane
       try {
         tmuxExec(`kill-pane -t ${paneId}`);
@@ -538,7 +576,7 @@ async function main() {
         appendRuntimeEvent(RUNTIME_EVENTS_LOG, {
           type: "agent.launch_failed",
           agent_id: agentId,
-          payload: { status: "failed", fabric_status: "error", pane_id: paneId, session: targetSession },
+          payload: { status: "failed", fabric_status: "error", pane_id: paneId, session: targetSession, pane_log_path: paneLogPath },
         });
       } catch {
         // ignore
