@@ -1761,7 +1761,7 @@ async function serveApiAgentMessage(res: ServerResponse, req: IncomingMessage, a
           text,
           description: String(body.description ?? text),
           acceptance_criteria: acceptanceCriteria ?? [],
-          report_to_when_done: body.report_to_when_done ?? "boss",
+          report_to_when_done: body.report_to_when_done ?? "secretary",
           task_id: taskId,
         }
       : { text };
@@ -2120,7 +2120,7 @@ function getProjects(filters?: { status?: string }): (DashboardRow & { task_coun
 
 type ActiveCoordinatorRoutingSnapshot = {
   agent_id: string;
-  role: "coordinator" | "sub-coordinator";
+  role: "secretary" | "coordinator" | "sub-coordinator";
   fabric_status: string;
   current_task: string | null;
   session: string;
@@ -2136,14 +2136,14 @@ type ActiveProjectRoutingSnapshot = {
 };
 
 function getActiveCoordinators(): ActiveCoordinatorRoutingSnapshot[] {
-  const allowedRoles = new Set(["coordinator", "sub-coordinator"]);
+  const allowedRoles = new Set(["secretary", "coordinator", "sub-coordinator"]);
   const blockedStatuses = new Set(["offline", "shutting_down"]);
 
   return Array.from(agents.values())
     .filter((a) => allowedRoles.has(a.role) && a.process_alive && !blockedStatuses.has(a.fabric_status))
     .map((a) => ({
       agent_id: a.agent_id,
-      role: a.role as "coordinator" | "sub-coordinator",
+      role: a.role as "secretary" | "coordinator" | "sub-coordinator",
       fabric_status: a.fabric_status,
       current_task: a.current_task,
       session: a.session,
@@ -2215,6 +2215,65 @@ function initProjectsDb(): void {
 
 function seedProjectsDb(): void {
   seed(PM_DB_PATH);
+}
+
+/**
+ * Truncate runtime-events.jsonl to keep file size under MAX_LOG_SIZE_MB.
+ * Keeps the most recent events, discarding oldest ones.
+ * Called periodically to prevent unbounded file growth.
+ */
+const MAX_LOG_SIZE_MB = 5;
+const MAX_LOG_SIZE_BYTES = MAX_LOG_SIZE_MB * 1024 * 1024;
+
+function truncateRuntimeEventsLog(): void {
+  try {
+    if (!existsSync(RUNTIME_EVENTS_LOG)) {
+      return;
+    }
+
+    const stats = statSync(RUNTIME_EVENTS_LOG);
+    if (stats.size <= MAX_LOG_SIZE_BYTES) {
+      return; // File is within size limit
+    }
+
+    // File is too large, truncate to keep recent events
+    const content = readFileSync(RUNTIME_EVENTS_LOG, "utf8");
+    const lines = content.split("\n").filter(Boolean);
+
+    // Calculate how many lines to keep (aim for ~80% of max size to avoid rapid re-truncation)
+    const targetSizeBytes = MAX_LOG_SIZE_BYTES * 0.8;
+    let bytesSum = 0;
+    let keepFrom = lines.length;
+
+    // Iterate from end to find how many recent lines fit in target size
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const lineBytes = Buffer.byteLength(lines[i] + "\n", "utf8");
+      if (bytesSum + lineBytes > targetSizeBytes) {
+        keepFrom = i + 1;
+        break;
+      }
+      bytesSum += lineBytes;
+    }
+
+    const keptLines = lines.slice(Math.max(0, keepFrom));
+    const truncatedContent = keptLines.join("\n") + (keptLines.length > 0 ? "\n" : "");
+
+    writeFileSync(RUNTIME_EVENTS_LOG, truncatedContent, "utf8");
+    runtimeEventsOffset = 0; // Reset offset since file was truncated
+
+    const discardedCount = lines.length - keptLines.length;
+    monitorLog("info", "runtime_events_truncated", {
+      total_lines: lines.length,
+      kept_lines: keptLines.length,
+      discarded_lines: discardedCount,
+      original_size_mb: (stats.size / 1024 / 1024).toFixed(2),
+      new_size_mb: (truncatedContent.length / 1024 / 1024).toFixed(2),
+    });
+  } catch (err) {
+    monitorLog("warn", "runtime_events_truncate_failed", {
+      error: String(err),
+    });
+  }
 }
 
 function serveStream(res: ServerResponse) {
@@ -2915,7 +2974,7 @@ async function startTelegramPolling() {
             userId,
             agentInfos,
             activeProjects,
-            "boss"
+            "secretary"
           );
         }
 
@@ -3016,6 +3075,8 @@ function main() {
       drainRuntimeEvents();
       refreshAgentsFromDb();
       clearRegistryDegraded();
+      // Check and truncate runtime events log if needed (every 10s)
+      truncateRuntimeEventsLog();
     } catch (err) {
       if (isRegistryDegradedError(err)) {
         setRegistryDegraded(err);
