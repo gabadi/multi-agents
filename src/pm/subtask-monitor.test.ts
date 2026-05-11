@@ -204,6 +204,54 @@ describe("subtask-monitor", () => {
   });
 
   // ─────────────────────────────────────────────────────────
+  test("uses subtask required_role and explicit acceptance criteria in dispatched contract", async () => {
+    cleanup();
+    const workerMailbox = "/tmp/fabric-agents/mailboxes/reviewer-worker.jsonl";
+    try { unlinkSync(workerMailbox); } catch { /* ignore */ }
+    mkdirSync("/tmp/fabric-agents/mailboxes", { recursive: true });
+
+    const deps = buildDeps({
+      findReadySubtasks: () => [
+        {
+          id: 8,
+          title: "Review Sub",
+          description: "Validate merge safety",
+          task_id: 99,
+          priority: 3,
+          sequence_order: 1,
+          required_role: "reviewer",
+          acceptance_criteria: [
+            {
+              id: "criterion-1",
+              description: "Review checklist is applied",
+              type: "manual",
+              params: { instructions: "Inspect the patch" },
+              required: true,
+            },
+          ],
+          attempt_count: 0,
+          max_attempts: 2,
+        },
+      ],
+      countActiveAssignmentsByRole: () => [{ role: "reviewer", count: 0 }],
+      launchWorker: async () => "reviewer-worker",
+      assignSubtask: (_db, _subtaskId, _agentId, role) => {
+        const lines = readFileSync(workerMailbox, "utf8").trim().split("\n");
+        const msg = JSON.parse(lines[0]);
+        assert.strictEqual(role, "reviewer");
+        assert.strictEqual(msg.payload.acceptance_criteria[0].id, "criterion-1");
+      },
+    });
+
+    runMonitorLoop("boss", deps);
+    await new Promise((r) => setTimeout(r, 100));
+    stopMonitorLoop();
+
+    const logs = readLogs();
+    assert.ok(logs.includes("[LAUNCH] subtask 8 -> agent reviewer-worker (reviewer)"));
+  });
+
+  // ─────────────────────────────────────────────────────────
   test("respects capacity limits and skips launch", async () => {
     cleanup();
     let launched = false;
@@ -477,7 +525,7 @@ describe("subtask-monitor", () => {
   });
 
   // ─────────────────────────────────────────────────────────
-  test("processCompletedSubtasks handles response type as well", () => {
+  test("processCompletedSubtasks handles fabric_report_completion payloads via task_id and reporter_agent_id", () => {
     const db = new DatabaseSync(testDbPath);
 
     const project = db
@@ -504,23 +552,144 @@ describe("subtask-monitor", () => {
     const responseLine =
       JSON.stringify({
         type: "response",
-        payload: { subtask_id: subtaskId, agent_id: "agent-42" },
+        payload: {
+          task_id: `subtask-${subtaskId}`,
+          reporter_agent_id: "agent-42",
+          status: "done",
+          summary: "completed from report tool",
+          verification_results: [],
+        },
       }) + "\n";
     writeFileSync(testMailboxPath, responseLine);
 
     processCompletedSubtasks(db, "boss");
 
     const st = db
-      .prepare(`SELECT status FROM subtasks WHERE id = ?`)
+      .prepare(`SELECT status, result_summary FROM subtasks WHERE id = ?`)
       .get(subtaskId) as Record<string, any>;
     assert.strictEqual(st.status, "done");
+    assert.strictEqual(st.result_summary, "completed from report tool");
 
     const sa = db
       .prepare(
-        `SELECT status FROM subtask_assignments WHERE subtask_id = ?`
+        `SELECT status, result_summary FROM subtask_assignments WHERE subtask_id = ?`
       )
       .get(subtaskId) as Record<string, any>;
     assert.strictEqual(sa.status, "completed");
+    assert.strictEqual(sa.result_summary, "completed from report tool");
+
+    db.close();
+  });
+
+  // ─────────────────────────────────────────────────────────
+  test("processCompletedSubtasks requeues failed subtasks when retry budget remains", () => {
+    const db = new DatabaseSync(testDbPath);
+
+    const project = db
+      .prepare(`INSERT INTO projects (name, status) VALUES (?, ?)`)
+      .run("Test Project Retry", "planned");
+    const projectId = Number(project.lastInsertRowid);
+    const task = db
+      .prepare(`INSERT INTO tasks (project_id, title, status) VALUES (?, ?, ?)`)
+      .run(projectId, "Retry Task", "in_progress");
+    const taskId = Number(task.lastInsertRowid);
+    const subtask = db
+      .prepare(`INSERT INTO subtasks (task_id, title, status, attempt_count, max_attempts, worker_agent_id) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(taskId, "Retry Subtask", "running", 1, 2, "agent-43");
+    const subtaskId = Number(subtask.lastInsertRowid);
+    db.prepare(`INSERT INTO subtask_assignments (subtask_id, agent_id, status) VALUES (?, ?, ?)`)
+      .run(subtaskId, "agent-43", "active");
+
+    mkdirSync("/tmp/fabric-agents/mailboxes", { recursive: true });
+    const failureLine =
+      JSON.stringify({
+        type: "response",
+        payload: {
+          task_id: `subtask-${subtaskId}`,
+          reporter_agent_id: "agent-43",
+          status: "failed",
+          summary: "tests failed",
+          verification_results: [{ criterion_id: "c1", passed: false, actual: "boom", expected: "ok", required: true }],
+        },
+      }) + "\n";
+    writeFileSync(testMailboxPath, failureLine);
+
+    processCompletedSubtasks(db, "boss");
+
+    const st = db
+      .prepare(`SELECT status, worker_agent_id, result_summary, last_error, completed_at FROM subtasks WHERE id = ?`)
+      .get(subtaskId) as Record<string, any>;
+    assert.strictEqual(st.status, "ready");
+    assert.strictEqual(st.worker_agent_id, null);
+    assert.strictEqual(st.result_summary, "tests failed");
+    assert.strictEqual(st.last_error, "tests failed");
+    assert.strictEqual(st.completed_at, null);
+
+    const sa = db
+      .prepare(`SELECT status, completed_at, result_summary FROM subtask_assignments WHERE subtask_id = ?`)
+      .get(subtaskId) as Record<string, any>;
+    assert.strictEqual(sa.status, "failed");
+    assert.ok(sa.completed_at);
+    assert.strictEqual(sa.result_summary, "tests failed");
+
+    const event = db
+      .prepare(`SELECT new_state, reason, payload FROM event_log WHERE entity_type = 'subtask' AND entity_id = ? ORDER BY id DESC LIMIT 1`)
+      .get(subtaskId) as Record<string, any>;
+    assert.strictEqual(event.new_state, "ready");
+    assert.ok((event.reason || "").includes("tests failed"));
+    assert.ok((event.payload || "").includes("retry_queued"));
+
+    db.close();
+  });
+
+  // ─────────────────────────────────────────────────────────
+  test("processCompletedSubtasks marks failed after retry budget is exhausted", () => {
+    const db = new DatabaseSync(testDbPath);
+
+    const project = db
+      .prepare(`INSERT INTO projects (name, status) VALUES (?, ?)`)
+      .run("Test Project Exhausted", "planned");
+    const projectId = Number(project.lastInsertRowid);
+    const task = db
+      .prepare(`INSERT INTO tasks (project_id, title, status) VALUES (?, ?, ?)`)
+      .run(projectId, "Exhausted Task", "in_progress");
+    const taskId = Number(task.lastInsertRowid);
+    const subtask = db
+      .prepare(`INSERT INTO subtasks (task_id, title, status, attempt_count, max_attempts, worker_agent_id) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(taskId, "Exhausted Subtask", "running", 2, 2, "agent-44");
+    const subtaskId = Number(subtask.lastInsertRowid);
+    db.prepare(`INSERT INTO subtask_assignments (subtask_id, agent_id, status) VALUES (?, ?, ?)`)
+      .run(subtaskId, "agent-44", "active");
+
+    mkdirSync("/tmp/fabric-agents/mailboxes", { recursive: true });
+    const failureLine =
+      JSON.stringify({
+        type: "response",
+        payload: {
+          task_id: `subtask-${subtaskId}`,
+          reporter_agent_id: "agent-44",
+          status: "failed",
+          summary: "retry budget exhausted",
+          verification_results: [],
+        },
+      }) + "\n";
+    writeFileSync(testMailboxPath, failureLine);
+
+    processCompletedSubtasks(db, "boss");
+
+    const st = db
+      .prepare(`SELECT status, result_summary, last_error, completed_at FROM subtasks WHERE id = ?`)
+      .get(subtaskId) as Record<string, any>;
+    assert.strictEqual(st.status, "failed");
+    assert.strictEqual(st.result_summary, "retry budget exhausted");
+    assert.strictEqual(st.last_error, "retry budget exhausted");
+    assert.ok(st.completed_at);
+
+    const sa = db
+      .prepare(`SELECT status, result_summary FROM subtask_assignments WHERE subtask_id = ?`)
+      .get(subtaskId) as Record<string, any>;
+    assert.strictEqual(sa.status, "failed");
+    assert.strictEqual(sa.result_summary, "retry budget exhausted");
 
     db.close();
   });

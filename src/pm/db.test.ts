@@ -59,12 +59,26 @@ export function runDbSchemaTest(dbPath: string = ":memory:"): { passed: boolean;
     });
     steps.push("All expected tables exist");
 
-    // ── Verify subtasks has worker_agent_id and qa_agent_id ──
+    // ── Verify subtasks orchestration columns ──
     const subtaskCols = db.prepare("PRAGMA table_info(subtasks)").all() as ColumnInfo[];
     const subtaskColNames = subtaskCols.map((c) => c.name);
-    assert(subtaskColNames.includes("worker_agent_id"), "subtasks missing worker_agent_id");
-    assert(subtaskColNames.includes("qa_agent_id"), "subtasks missing qa_agent_id");
-    steps.push("subtasks has worker_agent_id and qa_agent_id columns");
+    [
+      "worker_agent_id",
+      "qa_agent_id",
+      "required_role",
+      "acceptance_criteria_json",
+      "attempt_count",
+      "max_attempts",
+      "last_error",
+    ].forEach((name) => {
+      assert(subtaskColNames.includes(name), `subtasks missing ${name}`);
+    });
+
+    const subtaskColMap = new Map(subtaskCols.map((c) => [c.name, c]));
+    assert(subtaskColMap.get("required_role")?.dflt_value === "'dev'", "required_role default mismatch");
+    assert(subtaskColMap.get("attempt_count")?.dflt_value === "0", "attempt_count default mismatch");
+    assert(subtaskColMap.get("max_attempts")?.dflt_value === "2", "max_attempts default mismatch");
+    steps.push("subtasks orchestration columns verified");
 
     // ── Verify subtask_assignments schema ──
     const cols = db.prepare("PRAGMA table_info(subtask_assignments)").all() as ColumnInfo[];

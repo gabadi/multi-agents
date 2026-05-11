@@ -107,6 +107,45 @@ describe("subtask-queries", () => {
     assert.strictEqual(ready[0].title, "Ready no deps");
   });
 
+  test("findReadySubtasks exposes orchestration metadata and skips exhausted retries", () => {
+    const db = setup();
+
+    db.prepare("INSERT INTO projects (name, code, status) VALUES (?, ?, ?)").run("Test", "TST6", "active");
+    const project = db.prepare("SELECT id FROM projects WHERE code = ?").get("TST6") as { id: number };
+
+    db.prepare("INSERT INTO tasks (project_id, title, status) VALUES (?, ?, ?)").run(project.id, "Task", "in_progress");
+    const task = db.prepare("SELECT id FROM tasks WHERE title = ?").get("Task") as { id: number };
+
+    const criteria = JSON.stringify([
+      {
+        id: "c1",
+        description: "Run reviewer checks",
+        type: "manual",
+        params: { instructions: "Inspect retry behavior" },
+        required: true,
+      },
+    ]);
+
+    db.prepare(
+      `INSERT INTO subtasks (task_id, title, description, status, required_role, acceptance_criteria_json, attempt_count, max_attempts)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(task.id, "Reviewer lane", "Needs reviewer", "ready", "reviewer", criteria, 0, 3);
+
+    db.prepare(
+      `INSERT INTO subtasks (task_id, title, status, attempt_count, max_attempts)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(task.id, "Exhausted lane", "ready", 2, 2);
+
+    const ready = findReadySubtasks(db);
+    assert.strictEqual(ready.length, 1);
+    assert.strictEqual(ready[0].title, "Reviewer lane");
+    assert.strictEqual(ready[0].description, "Needs reviewer");
+    assert.strictEqual(ready[0].required_role, "reviewer");
+    assert.strictEqual(ready[0].attempt_count, 0);
+    assert.strictEqual(ready[0].max_attempts, 3);
+    assert.deepStrictEqual(ready[0].acceptance_criteria, JSON.parse(criteria));
+  });
+
   // ─────────────────────────────────────────────────────────────
   // countActiveAssignmentsByRole
   // ─────────────────────────────────────────────────────────────

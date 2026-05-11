@@ -1,6 +1,21 @@
 import { DatabaseSync } from "node:sqlite";
 import { isValidStatus } from "./enums.js";
 
+type SubtaskAcceptanceCriterion = {
+  id: string;
+  description: string;
+  type: string;
+  params: Record<string, unknown>;
+  required: boolean;
+};
+
+function serializeAcceptanceCriteria(
+  criteria?: SubtaskAcceptanceCriterion[]
+): string | null {
+  if (!criteria?.length) return null;
+  return JSON.stringify(criteria);
+}
+
 export function createProject(
   db: DatabaseSync,
   data: {
@@ -90,6 +105,10 @@ export function createSubtask(
     sequence_order?: number;
     priority?: number;
     validation_criteria?: string;
+    required_role?: string;
+    acceptance_criteria?: SubtaskAcceptanceCriterion[];
+    attempt_count?: number;
+    max_attempts?: number;
     worker_agent_id?: string;
     qa_agent_id?: string;
     assigned_human?: string;
@@ -107,8 +126,9 @@ export function createSubtask(
 
   const stmt = db.prepare(
     `INSERT INTO subtasks (task_id, title, description, status, sequence_order,
-                           priority, validation_criteria, worker_agent_id, qa_agent_id, assigned_human)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                           priority, validation_criteria, required_role, acceptance_criteria_json,
+                           attempt_count, max_attempts, worker_agent_id, qa_agent_id, assigned_human)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   stmt.run(
     data.task_id,
@@ -118,6 +138,10 @@ export function createSubtask(
     data.sequence_order ?? 0,
     data.priority ?? 0,
     data.validation_criteria ?? null,
+    data.required_role ?? "dev",
+    serializeAcceptanceCriteria(data.acceptance_criteria),
+    data.attempt_count ?? 0,
+    data.max_attempts ?? 2,
     data.worker_agent_id ?? null,
     data.qa_agent_id ?? null,
     data.assigned_human ?? null

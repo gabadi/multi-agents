@@ -45,6 +45,11 @@ export interface SubtaskRow {
   status: string;
   priority: number;
   validation_criteria: string | null;
+  required_role: string | null;
+  acceptance_criteria_json: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  last_error: string | null;
   worker_agent_id: string | null;
   qa_agent_id: string | null;
   assigned_human: string | null;

@@ -172,6 +172,10 @@ export function assignSubtask(
     `UPDATE subtasks
      SET status = 'running',
          worker_agent_id = ?,
+         attempt_count = COALESCE(attempt_count, 0) + 1,
+         last_error = NULL,
+         result_summary = NULL,
+         completed_at = NULL,
          updated_at = datetime('now')
      WHERE id = ?`
   ).run(agentId, subtaskId);
@@ -179,7 +183,13 @@ export function assignSubtask(
   db.prepare(
     `INSERT INTO subtask_assignments
        (subtask_id, agent_id, assignment_type, status)
-     VALUES (?, ?, 'worker', 'active')`
+     VALUES (?, ?, 'worker', 'active')
+     ON CONFLICT(subtask_id, assignment_type) DO UPDATE SET
+       agent_id = excluded.agent_id,
+       assigned_at = datetime('now'),
+       completed_at = NULL,
+       result_summary = NULL,
+       status = 'active'`
   ).run(subtaskId, agentId);
 }
 
@@ -199,9 +209,10 @@ export function handleLaunchError(
     `UPDATE subtasks
      SET status = 'failed',
          result_summary = ?,
+         last_error = ?,
          updated_at = datetime('now')
      WHERE id = ?`
-  ).run(error, subtaskId);
+  ).run(error, error, subtaskId);
 }
 
 /**

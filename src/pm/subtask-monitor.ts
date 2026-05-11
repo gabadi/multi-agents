@@ -103,6 +103,58 @@ function getMonitorOffsetPath(coordinatorId: string): string {
   );
 }
 
+function extractSubtaskId(payload: Record<string, any>): number | null {
+  const explicit = payload.subtask_id ?? payload.subtaskId;
+  if (typeof explicit === "number") return explicit;
+
+  const taskId = payload.task_id ?? payload.taskId;
+  if (typeof taskId === "string") {
+    const match = /^subtask-(\d+)$/.exec(taskId.trim());
+    if (match) return Number(match[1]);
+  }
+
+  return null;
+}
+
+function extractAgentId(payload: Record<string, any>): string | null {
+  const agentId = payload.agent_id ?? payload.agentId ?? payload.reporter_agent_id;
+  return typeof agentId === "string" && agentId.trim() ? agentId : null;
+}
+
+function getReportedStatus(payload: Record<string, any>): "done" | "failed" | "blocked" {
+  const status = payload.status;
+  if (status === "failed" || status === "blocked") return status;
+  return "done";
+}
+
+function getSummary(payload: Record<string, any>): string | null {
+  const summary = payload.summary;
+  return typeof summary === "string" && summary.trim() ? summary : null;
+}
+
+function writeSubtaskEvent(
+  db: DatabaseSync,
+  subtaskId: number,
+  newState: string,
+  agentId: string | null,
+  reason: string | null,
+  payload?: Record<string, unknown>
+): void {
+  db.prepare(
+    `INSERT INTO event_log (entity_type, entity_id, actor_type, actor_id, new_state, reason, agent_id, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    "subtask",
+    subtaskId,
+    agentId ? "agent" : "system",
+    agentId,
+    newState,
+    reason,
+    agentId,
+    payload ? JSON.stringify(payload) : null
+  );
+}
+
 function scheduleNext(): void {
   if (running) {
     timer = setTimeout(() => tick(), getIntervalMs());
@@ -145,6 +197,7 @@ async function tick(): Promise<void> {
   let db: DatabaseSync | null = null;
   try {
     db = new DatabaseSync(getDbPath());
+    processCompletedSubtasks(db, coordinatorIdGlobal!);
     const ready = deps.findReadySubtasks(db);
     const counts = deps.countActiveAssignmentsByRole(db);
 
@@ -154,8 +207,7 @@ async function tick(): Promise<void> {
     }
 
     for (const subtask of ready) {
-      // Default role until schema supports required_role on subtasks
-      const role = "dev";
+      const role = (subtask.required_role || "dev").toLowerCase();
       const current = countMap.get(role) || 0;
       const max = getMaxForRole(role);
 
@@ -297,8 +349,8 @@ export function getMonitorState(): {
 
 /**
  * Reads the coordinator mailbox looking for response/completion messages
- * that reference subtasks, then marks those subtasks and their assignments
- * as completed.
+ * that reference subtasks, then applies the reported terminal status,
+ * assignment outcome, and retry behavior.
  *
  * @param db            — open SQLite DatabaseSync handle
  * @param coordinatorId — Fabric agent_id whose mailbox is read
@@ -335,24 +387,119 @@ export function processCompletedSubtasks(
     if (!line.trim()) continue;
     try {
       const msg = JSON.parse(line);
-      if (msg.type === "response" || msg.type === "completion") {
-        const payload = msg.payload || msg;
-        const subtaskId = payload.subtask_id ?? payload.subtaskId;
-        const agentId = payload.agent_id ?? payload.agentId;
-        if (typeof subtaskId === "number") {
-          if (agentId) {
-            db.prepare(
-              `UPDATE subtask_assignments SET status = 'completed', completed_at = datetime('now') WHERE subtask_id = ? AND agent_id = ?`
-            ).run(subtaskId, agentId);
-          } else {
-            db.prepare(
-              `UPDATE subtask_assignments SET status = 'completed', completed_at = datetime('now') WHERE subtask_id = ?`
-            ).run(subtaskId);
-          }
-          db.prepare(
-            `UPDATE subtasks SET status = 'done', completed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`
-          ).run(subtaskId);
-        }
+      if (msg.type !== "response" && msg.type !== "completion") {
+        continue;
+      }
+
+      const payload = (msg.payload || msg) as Record<string, any>;
+      const subtaskId = extractSubtaskId(payload);
+      const agentId = extractAgentId(payload);
+      const reportedStatus = getReportedStatus(payload);
+      const summary = getSummary(payload);
+
+      if (subtaskId == null) {
+        continue;
+      }
+
+      const subtask = db.prepare(
+        `SELECT attempt_count, max_attempts FROM subtasks WHERE id = ?`
+      ).get(subtaskId) as { attempt_count: number | null; max_attempts: number | null } | undefined;
+      if (!subtask) {
+        continue;
+      }
+
+      const attempts = subtask.attempt_count ?? 0;
+      const maxAttempts = subtask.max_attempts ?? 2;
+      const verificationResults = Array.isArray(payload.verification_results)
+        ? payload.verification_results
+        : [];
+      const eventPayload = {
+        reported_status: reportedStatus,
+        verification_results: verificationResults,
+        task_id: payload.task_id ?? null,
+      };
+
+      const assignmentStatus = reportedStatus === "done"
+        ? "completed"
+        : reportedStatus === "blocked"
+          ? "cancelled"
+          : "failed";
+      const assignmentSql = agentId
+        ? `UPDATE subtask_assignments
+             SET status = ?, completed_at = datetime('now'), result_summary = ?
+           WHERE subtask_id = ? AND agent_id = ?`
+        : `UPDATE subtask_assignments
+             SET status = ?, completed_at = datetime('now'), result_summary = ?
+           WHERE subtask_id = ?`;
+      const assignmentParams = agentId
+        ? [assignmentStatus, summary, subtaskId, agentId]
+        : [assignmentStatus, summary, subtaskId];
+      db.prepare(assignmentSql).run(...assignmentParams);
+
+      if (reportedStatus === "done") {
+        db.prepare(
+          `UPDATE subtasks
+           SET status = 'done',
+               result_summary = ?,
+               completed_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE id = ?`
+        ).run(summary, subtaskId);
+        writeSubtaskEvent(db, subtaskId, "done", agentId, summary, eventPayload);
+        continue;
+      }
+
+      if (reportedStatus === "blocked") {
+        db.prepare(
+          `UPDATE subtasks
+           SET status = 'blocked',
+               result_summary = ?,
+               last_error = ?,
+               completed_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE id = ?`
+        ).run(summary, summary, subtaskId);
+        writeSubtaskEvent(db, subtaskId, "blocked", agentId, summary, eventPayload);
+        continue;
+      }
+
+      if (attempts < maxAttempts) {
+        db.prepare(
+          `UPDATE subtasks
+           SET status = 'ready',
+               worker_agent_id = NULL,
+               result_summary = ?,
+               last_error = ?,
+               completed_at = NULL,
+               updated_at = datetime('now')
+           WHERE id = ?`
+        ).run(summary, summary, subtaskId);
+        writeSubtaskEvent(
+          db,
+          subtaskId,
+          "ready",
+          agentId,
+          summary || `Retry queued (${attempts}/${maxAttempts})`,
+          { ...eventPayload, retry_queued: true, attempt_count: attempts, max_attempts: maxAttempts }
+        );
+      } else {
+        db.prepare(
+          `UPDATE subtasks
+           SET status = 'failed',
+               result_summary = ?,
+               last_error = ?,
+               completed_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE id = ?`
+        ).run(summary, summary, subtaskId);
+        writeSubtaskEvent(
+          db,
+          subtaskId,
+          "failed",
+          agentId,
+          summary,
+          { ...eventPayload, retry_queued: false, attempt_count: attempts, max_attempts: maxAttempts }
+        );
       }
     } catch {
       // skip malformed lines

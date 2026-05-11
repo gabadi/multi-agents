@@ -112,6 +112,15 @@ export function initDb(dbPath: string = "data/project_management.db"): DatabaseS
       -- Free-text validation criteria (Markdown/text)
       validation_criteria TEXT,
 
+      -- Role and machine-readable contract for automatic orchestration
+      required_role TEXT DEFAULT 'dev',
+      acceptance_criteria_json TEXT,
+
+      -- Retry budget tracked across worker attempts
+      attempt_count INTEGER DEFAULT 0,
+      max_attempts INTEGER DEFAULT 2,
+      last_error TEXT,
+
       -- Optional agent references (plain TEXT, no FK to agent system)
       worker_agent_id TEXT,
       qa_agent_id TEXT,
@@ -272,6 +281,11 @@ export function initDb(dbPath: string = "data/project_management.db"): DatabaseS
     { name: "assigned_human", def: "TEXT" },
     { name: "result_summary", def: "TEXT" },
     { name: "validation_criteria", def: "TEXT" },
+    { name: "required_role", def: "TEXT DEFAULT 'dev'" },
+    { name: "acceptance_criteria_json", def: "TEXT" },
+    { name: "attempt_count", def: "INTEGER DEFAULT 0" },
+    { name: "max_attempts", def: "INTEGER DEFAULT 2" },
+    { name: "last_error", def: "TEXT" },
   ]);
 
   // ─────────────────────────────────────────────────────────────
@@ -285,6 +299,7 @@ export function initDb(dbPath: string = "data/project_management.db"): DatabaseS
   db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_status ON subtasks(status);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_worker ON subtasks(worker_agent_id);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_qa ON subtasks(qa_agent_id);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_required_role ON subtasks(required_role);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_subtask_deps_on ON subtask_dependencies(depends_on_subtask_id);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_event_entity ON event_log(entity_type, entity_id, created_at);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_event_created ON event_log(created_at);`);
