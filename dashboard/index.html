@@ -665,6 +665,14 @@
       min-height: 0;
       background: var(--panel);
     }
+    .ops-chat-rail {
+      position: sticky;
+      top: 74px;
+      height: calc(100vh - 88px);
+      max-height: calc(100vh - 88px);
+      min-height: calc(100vh - 88px);
+      overflow: hidden;
+    }
     .ops-panel-head {
       display: flex;
       justify-content: space-between;
@@ -901,6 +909,19 @@
       display: flex;
       flex-direction: column;
     }
+    .ops-chat-rail .acp-dock,
+    .ops-chat-rail .acp-panel {
+      flex: 1;
+      min-height: 0;
+    }
+    .ops-chat-rail .acp-messages {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .ops-chat-rail .acp-composer {
+      flex: 0 0 auto;
+    }
     .ops-link { color: var(--cyan); text-decoration: none; }
     .ops-link:hover { text-decoration: underline; }
 
@@ -968,6 +989,7 @@
 
     @media (max-width: 1100px) {
       .ops-shell { grid-template-columns: 1fr; }
+      .ops-chat-rail { position: static; height: auto; max-height: none; min-height: 0; }
       .ops-rail-body { max-height: none; }
       .agents-workspace { grid-template-columns: 1fr; }
       .agent-detail-shell { position: static; max-height: none; }
