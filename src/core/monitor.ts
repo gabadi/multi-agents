@@ -7,7 +7,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync, readdirSync, watch, existsSync, statSync, openSync, closeSync, readSync, fstatSync, appendFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
-import { basename, extname, resolve, dirname } from "node:path";
+import { basename, extname, resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -1134,6 +1134,10 @@ function safeAgentFileName(agentId: string) {
   return agentId.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+function shellQuote(value: string): string {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -2086,6 +2090,104 @@ function serveApiChat(res: ServerResponse, url: URL) {
   }
 }
 
+function killAgentProcessResources(agent: MonitoredAgent): { paneKilled: boolean; pidKilled: boolean; sessionKilled: boolean; sessionName: string | null } {
+  const paneId = String(agent.pane_id || "").trim();
+  const sessionName = (paneId ? getTmuxSessionForPane(paneId) : null) || String(agent.session || "").trim() || null;
+  const paneCountBefore = sessionName
+    ? (() => {
+        try {
+          return Number(execSync(`tmux list-panes -t ${shellQuote(sessionName)} 2>/dev/null | wc -l`, { encoding: "utf8", timeout: 2000 }).trim() || "0");
+        } catch {
+          return 0;
+        }
+      })()
+    : 0;
+
+  let paneKilled = false;
+  if (paneId) {
+    try {
+      execSync(`tmux kill-pane -t ${shellQuote(paneId)}`, { encoding: "utf8", timeout: 3000 });
+      paneKilled = true;
+    } catch {
+      // ignore; fall back to pid kill
+    }
+  }
+
+  let pidKilled = false;
+  if (agent.pid && checkPid(agent.pid)) {
+    try {
+      process.kill(agent.pid, "SIGTERM");
+      pidKilled = true;
+    } catch {
+      // ignore
+    }
+  }
+
+  let sessionKilled = false;
+  if (sessionName && paneCountBefore <= 1) {
+    try {
+      execSync(`tmux kill-session -t ${shellQuote(sessionName)}`, { encoding: "utf8", timeout: 3000 });
+      sessionKilled = true;
+    } catch {
+      // ignore; session may already be gone
+    }
+  }
+
+  return { paneKilled, pidKilled, sessionKilled, sessionName };
+}
+
+function removeAgentRuntimeArtifacts(agentId: string): string[] {
+  const removed: string[] = [];
+  const candidates = [
+    join(MAILBOX_DIR, `${agentId}.jsonl`),
+    join(PID_DIR, `${agentId}.pid`),
+    join(STATE_DIR, `${agentId}.json`),
+    outputFileForAgent(agentId),
+  ];
+
+  for (const path of candidates) {
+    try {
+      if (existsSync(path)) {
+        unlinkSync(path);
+        removed.push(path);
+      }
+    } catch {
+      // ignore individual cleanup failures
+    }
+  }
+
+  try {
+    const paneLogDir = join(FABRIC_DIR, "pane-logs");
+    if (existsSync(paneLogDir)) {
+      for (const entry of readdirSync(paneLogDir)) {
+        if (!entry.startsWith(`${safeAgentFileName(agentId)}-`)) continue;
+        const path = join(paneLogDir, entry);
+        try {
+          unlinkSync(path);
+          removed.push(path);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  outputOffsets.delete(agentId);
+  return removed;
+}
+
+function cleanupAgentRegistration(agentId: string): void {
+  const db = getDb();
+  try {
+    db.prepare("DELETE FROM agents WHERE agent_id = ?").run(agentId);
+  } finally {
+    db.close();
+  }
+  agents.delete(agentId);
+}
+
 function serveApiKill(res: ServerResponse, agentId: string) {
   const agent = agents.get(agentId);
   if (!agent) {
@@ -2101,7 +2203,7 @@ function serveApiKill(res: ServerResponse, agentId: string) {
     return;
   }
   try {
-    execSync(`tmux kill-pane -t ${agent.pane_id}`, { encoding: "utf8" });
+    execSync(`tmux kill-pane -t ${shellQuote(agent.pane_id)}`, { encoding: "utf8" });
     agent.fabric_status = "shutting_down";
     broadcastSSE("agent-update", agentFromMemory(agentId));
     monitorLog("info", "kill.success", { agent_id: agentId, pane_id: agent.pane_id });
@@ -2111,6 +2213,47 @@ function serveApiKill(res: ServerResponse, agentId: string) {
     monitorLog("error", "kill.failed", { agent_id: agentId, pane_id: agent.pane_id, error: String(err) });
     res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ error: String(err) }));
+  }
+}
+
+function serveApiCleanupAgent(res: ServerResponse, agentId: string) {
+  const agent = agentExists(agentId);
+  if (!agent) {
+    sendJson(res, 404, { ok: false, error: "Agent not found" });
+    monitorLog("warn", "cleanup.not_found", { agent_id: agentId });
+    return;
+  }
+
+  try {
+    const processResult = killAgentProcessResources(agent);
+    const removedFiles = removeAgentRuntimeArtifacts(agentId);
+    cleanupAgentRegistration(agentId);
+
+    broadcastSSE("agent-removed", { agent_id: agentId, reason: "cleanup_requested" });
+    monitorLog("info", "cleanup.success", {
+      agent_id: agentId,
+      pane_id: agent.pane_id,
+      pid: agent.pid,
+      session: processResult.sessionName,
+      pane_killed: processResult.paneKilled,
+      pid_killed: processResult.pidKilled,
+      session_killed: processResult.sessionKilled,
+      removed_files: removedFiles,
+    });
+
+    sendJson(res, 200, {
+      ok: true,
+      action: "cleanup-agent",
+      agent_id: agentId,
+      pane_killed: processResult.paneKilled,
+      pid_killed: processResult.pidKilled,
+      session_killed: processResult.sessionKilled,
+      session: processResult.sessionName,
+      removed_files: removedFiles,
+    });
+  } catch (err) {
+    monitorLog("error", "cleanup.failed", { agent_id: agentId, error: String(err) });
+    sendJson(res, 500, { ok: false, error: String(err) });
   }
 }
 
@@ -3075,6 +3218,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   } else if (url.pathname.startsWith("/api/kill/") && req.method === "POST") {
     const agentId = url.pathname.slice("/api/kill/".length);
     serveApiKill(res, agentId);
+  } else if (url.pathname.startsWith("/api/cleanup-agent/") && req.method === "POST") {
+    const agentId = url.pathname.slice("/api/cleanup-agent/".length);
+    serveApiCleanupAgent(res, agentId);
   } else if (url.pathname.startsWith("/api/healthcheck/") && req.method === "POST") {
     const agentId = url.pathname.slice("/api/healthcheck/".length);
     serveApiHealthcheck(res, agentId);
