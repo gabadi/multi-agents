@@ -635,6 +635,99 @@
     }
     .event-time { color: var(--muted); margin-right: 8px; }
 
+    .ops-shell {
+      display: grid;
+      grid-template-columns: minmax(220px, .9fr) minmax(540px, 1.8fr) minmax(280px, 1fr);
+      gap: 12px;
+      align-items: start;
+      min-height: calc(100vh - 180px);
+    }
+    .ops-nav-panel, .ops-main-panel, .ops-chat-rail {
+      min-height: 0;
+      background: var(--panel);
+    }
+    .ops-panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ops-nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .ops-nav-item {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .ops-nav-item.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(6,182,212,.25) inset;
+    }
+    .ops-main-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .ops-lane-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      padding: 10px;
+    }
+    .ops-event-log {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15,17,23,.58);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      max-height: 32vh;
+      overflow: hidden;
+    }
+    .ops-event-log.collapsed {
+      grid-template-rows: auto;
+      max-height: 44px;
+    }
+    .ops-event-log.collapsed #opsEventLogList { display: none; }
+    .ops-event-log-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    #opsEventLogList {
+      padding: 10px;
+      overflow: auto;
+      gap: 8px;
+    }
+    .ops-rail-body {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: calc(100vh - 300px);
+      overflow: auto;
+    }
+
     .log-panel {
       border-top: 1px solid var(--border);
       background: var(--panel);
@@ -698,6 +791,8 @@
     .subtask-running .subtask-row { grid-template-columns: 60px 1fr 1fr; }
 
     @media (max-width: 1100px) {
+      .ops-shell { grid-template-columns: 1fr; }
+      .ops-rail-body { max-height: none; }
       .agents-workspace { grid-template-columns: 1fr; }
       .agent-detail-shell { position: static; max-height: none; }
       .agent-detail-panel { min-height: 0; }
@@ -706,6 +801,7 @@
 
     @media (max-width: 600px) {
       .grid { grid-template-columns: 1fr; }
+      .ops-main-grid { grid-template-columns: 1fr; }
       .topbar { align-items: flex-start; flex-direction: column; }
       .status-line { justify-content: flex-start; }
       .kanban { overflow-x: auto; }
@@ -724,7 +820,8 @@
       <div class="title-wrap">
         <div class="title">🔮 Fabric Monitor</div>
         <nav class="tabs">
-          <button class="tab-btn active" data-tab="agents">Agents</button>
+          <button class="tab-btn active" data-tab="operations">Operations</button>
+          <button class="tab-btn" data-tab="agents">Agents</button>
           <button class="tab-btn" data-tab="projects">Projects</button>
           <button class="tab-btn" data-tab="tasks">Tasks</button>
           <button class="tab-btn" data-tab="timeline">Timeline</button>
@@ -745,7 +842,47 @@
     </header>
 
     <main class="content">
-      <section class="view active" id="view-agents">
+      <section class="view active" id="view-operations">
+        <div class="ops-shell">
+          <aside class="ops-nav-panel card">
+            <div class="ops-panel-head">
+              <strong>Operations Navigation</strong>
+              <span class="muted" id="opsAgentTotal">0 agents</span>
+            </div>
+            <div id="opsNavList" class="ops-nav-list"></div>
+          </aside>
+
+          <section class="ops-main-panel card">
+            <div class="ops-panel-head">
+              <strong id="opsLaneTitle">Live Coordination</strong>
+              <div class="chip-row">
+                <span class="chip" id="opsTasksCount">Tasks: 0</span>
+                <span class="chip" id="opsProjectsCount">Projects: 0</span>
+              </div>
+            </div>
+            <div id="opsMainGrid" class="ops-main-grid"></div>
+            <div id="opsEventLogPanel" class="ops-event-log">
+              <div class="ops-event-log-head">
+                <strong>Live Operations Event Log</strong>
+                <button class="btn" data-action="toggle-ops-log">Collapse</button>
+              </div>
+              <ul id="opsEventLogList" class="event-log-list"></ul>
+            </div>
+          </section>
+
+          <aside class="ops-chat-rail card">
+            <div class="ops-panel-head">
+              <strong>Agent Detail / Chat Rail</strong>
+              <span class="muted" id="opsRailAgent">No agent selected</span>
+            </div>
+            <div id="opsRailBody" class="ops-rail-body">
+              <p class="muted">Reserved rail for selected agent details, quick controls, and live chat context.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-agents">
         <div class="agents-workspace">
           <section class="agents-inventory">
             <div class="agent-controls">
@@ -881,10 +1018,14 @@
   <script>
     const API = ''; // Rutas relativas — dashboard servido desde mismo servidor
     const state = {
-      activeTab: 'agents',
+      activeTab: 'operations',
+      // Normalized entity store (v2 monitor adapters)
       agents: new Map(),
       projects: new Map(),
       tasks: new Map(),
+      subtasks: new Map(),
+      taskSubtasks: new Map(),
+      projectTasks: new Map(),
       allEvents: [],
       logEvents: [],
       logPaused: false,
@@ -916,6 +1057,8 @@
       acpHeaderSignature: '',
       acpMessagesSignature: '',
       subtasksQueue: { ready: [], running: [], blocked: [], counts: { ready: 0, running: 0, blocked: 0 } },
+      operationsLane: 'coordinators',
+      operationsLogCollapsed: false,
     };
 
     const refs = {
@@ -955,6 +1098,16 @@
       subtaskStatsBar: document.getElementById('subtaskStatsBar'),
       subtaskReadyTable: document.getElementById('subtaskReadyTable'),
       subtaskRunningTable: document.getElementById('subtaskRunningTable'),
+      opsNavList: document.getElementById('opsNavList'),
+      opsMainGrid: document.getElementById('opsMainGrid'),
+      opsAgentTotal: document.getElementById('opsAgentTotal'),
+      opsTasksCount: document.getElementById('opsTasksCount'),
+      opsProjectsCount: document.getElementById('opsProjectsCount'),
+      opsLaneTitle: document.getElementById('opsLaneTitle'),
+      opsRailAgent: document.getElementById('opsRailAgent'),
+      opsRailBody: document.getElementById('opsRailBody'),
+      opsEventLogList: document.getElementById('opsEventLogList'),
+      opsEventLogPanel: document.getElementById('opsEventLogPanel'),
     };
 
     const AGENT_BUSY = new Set(['processing','turn_active','waiting_llm','agent_starting','processing_inbox']);
@@ -1031,14 +1184,82 @@
       return true;
     }
 
+    function normalizeProjectEntity(project = {}) {
+      const id = Number(project.id ?? project.project_id ?? project.projectId);
+      if (!Number.isFinite(id)) return null;
+      const status = project.status || 'planned';
+      const taskCounts = project.task_counts?.by_status || project.task_counts || {};
+      const totalTasks = project.total_tasks ?? project.task_counts?.total;
+      return {
+        ...project,
+        id,
+        project_id: id,
+        code: project.code || project.project_code || `p${id}`,
+        name: project.name || `Project ${id}`,
+        status,
+        task_counts: taskCounts,
+        total_tasks: Number.isFinite(totalTasks) ? totalTasks : undefined,
+      };
+    }
+
+    function normalizeTaskEntity(task = {}) {
+      const id = Number(task.id ?? task.task_id ?? task.taskId);
+      if (!Number.isFinite(id)) return null;
+      const projectId = Number(task.project_id ?? task.projectId);
+      return {
+        ...task,
+        id,
+        project_id: Number.isFinite(projectId) ? projectId : task.project_id,
+      };
+    }
+
+    function normalizeSubtaskEntity(subtask = {}, parentTaskId = null) {
+      const id = Number(subtask.id ?? subtask.subtask_id ?? subtask.subtaskId);
+      if (!Number.isFinite(id)) return null;
+      const taskId = Number(subtask.task_id ?? subtask.taskId ?? parentTaskId);
+      return {
+        ...subtask,
+        id,
+        task_id: Number.isFinite(taskId) ? taskId : parentTaskId,
+      };
+    }
+
+    function upsertSubtask(subtask, options = {}) {
+      const normalized = normalizeSubtaskEntity(subtask, options.taskId);
+      if (!normalized || normalized.task_id == null) return null;
+      const prev = state.subtasks.get(normalized.id) || {};
+      const merged = { ...prev, ...normalized, _lastSnapshot: Date.now() };
+      state.subtasks.set(normalized.id, merged);
+      const taskId = Number(merged.task_id);
+      if (Number.isFinite(taskId)) {
+        const current = state.taskSubtasks.get(taskId) || [];
+        if (!current.includes(merged.id)) state.taskSubtasks.set(taskId, [...current, merged.id]);
+      }
+      return merged;
+    }
+
+    function syncTaskSubtasks(taskId, subtasks = []) {
+      if (!Number.isFinite(Number(taskId))) return [];
+      const normalized = subtasks
+        .map((sub) => upsertSubtask(sub, { taskId }))
+        .filter(Boolean);
+      state.taskSubtasks.set(Number(taskId), normalized.map((s) => s.id));
+      return normalized;
+    }
+
+    function materializeTaskSubtasks(taskId) {
+      const ids = state.taskSubtasks.get(Number(taskId)) || [];
+      return ids.map((id) => state.subtasks.get(id)).filter(Boolean);
+    }
+
     function setAgents(list = []) {
       const incomingIds = new Set();
       for (const a of list) {
+        if (!a?.agent_id) continue;
         incomingIds.add(a.agent_id);
         const prev = state.agents.get(a.agent_id) || {};
         state.agents.set(a.agent_id, { ...prev, ...a, _lastSnapshot: Date.now() });
       }
-      // Soft-stale cleanup: agents missing from >4 consecutive snapshots (40s) are marked offline
       const now = Date.now();
       for (const [id, a] of state.agents.entries()) {
         if (!incomingIds.has(id) && (now - (a._lastSnapshot || 0)) > 40000) {
@@ -1050,68 +1271,128 @@
       }
       renderAgents();
       renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function removeAgent(agentId) {
       state.agents.delete(agentId);
       if (state.activeTab === 'agents') renderAgents();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function upsertAgent(a) {
       if (!a || !a.agent_id) return;
       const prev = state.agents.get(a.agent_id) || {};
-      state.agents.set(a.agent_id, { ...prev, ...a });
+      state.agents.set(a.agent_id, { ...prev, ...a, _lastSnapshot: Date.now() });
       if (state.activeTab === 'agents') renderAgents();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
 
     function setProjects(list = []) {
-      const incomingIds = new Set();
-      for (const p of list) {
-        incomingIds.add(p.id);
+      for (const raw of list) {
+        const p = normalizeProjectEntity(raw);
+        if (!p) continue;
         const prev = state.projects.get(p.id) || {};
         state.projects.set(p.id, { ...prev, ...p, _lastSnapshot: Date.now() });
       }
       renderProjects();
       populateProjectFilter();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function removeProject(projectId) {
-      state.projects.delete(projectId);
+      state.projects.delete(Number(projectId));
+      state.projectTasks.delete(Number(projectId));
       if (state.activeTab === 'projects') renderProjects();
       populateProjectFilter();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function upsertProject(p) {
-      if (!p || p.id == null) return;
-      const prev = state.projects.get(p.id) || {};
-      state.projects.set(p.id, { ...prev, ...p });
+      const normalized = normalizeProjectEntity(p);
+      if (!normalized) return;
+      const prev = state.projects.get(normalized.id) || {};
+      state.projects.set(normalized.id, { ...prev, ...normalized, _lastSnapshot: Date.now() });
       if (state.activeTab === 'projects') renderProjects();
       populateProjectFilter();
+      if (state.activeTab === 'operations') renderOperations();
     }
 
     function setTasks(list = []) {
-      const incomingIds = new Set();
-      for (const t of list) {
-        incomingIds.add(t.id);
-        const prev = state.tasks.get(t.id) || {};
-        state.tasks.set(t.id, { ...prev, ...t, _lastSnapshot: Date.now() });
+      for (const raw of list) {
+        const task = normalizeTaskEntity(raw);
+        if (!task) continue;
+        const prev = state.tasks.get(task.id) || {};
+        const merged = { ...prev, ...task, _lastSnapshot: Date.now(), _stale: false };
+        state.tasks.set(task.id, merged);
+
+        const projectId = Number(merged.project_id);
+        if (Number.isFinite(projectId)) {
+          const projectTaskIds = state.projectTasks.get(projectId) || [];
+          if (!projectTaskIds.includes(merged.id)) state.projectTasks.set(projectId, [...projectTaskIds, merged.id]);
+        }
+
+        if (Array.isArray(raw.subtasks)) {
+          const normalizedSubtasks = syncTaskSubtasks(task.id, raw.subtasks);
+          merged.subtasks = normalizedSubtasks;
+          state.tasks.set(task.id, merged);
+        } else if (!Array.isArray(merged.subtasks)) {
+          merged.subtasks = materializeTaskSubtasks(task.id);
+          state.tasks.set(task.id, merged);
+        }
       }
       renderTasks();
       if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function removeTask(taskId) {
-      state.tasks.delete(taskId);
+      const id = Number(taskId);
+      const prev = state.tasks.get(id);
+      state.tasks.delete(id);
+      if (prev?.project_id != null) {
+        const projectId = Number(prev.project_id);
+        const ids = state.projectTasks.get(projectId) || [];
+        state.projectTasks.set(projectId, ids.filter((tid) => tid !== id));
+      }
+      const subIds = state.taskSubtasks.get(id) || [];
+      for (const subId of subIds) state.subtasks.delete(subId);
+      state.taskSubtasks.delete(id);
       if (state.activeTab === 'tasks') renderTasks();
       if (state.activeTab === 'projects') renderProjects();
       if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function upsertTask(t) {
-      if (!t || t.id == null) return;
-      const prev = state.tasks.get(t.id) || {};
-      state.tasks.set(t.id, { ...prev, ...t, _stale: false });
+      const task = normalizeTaskEntity(t);
+      if (!task) return;
+      const prev = state.tasks.get(task.id) || {};
+      const merged = { ...prev, ...task, _stale: false, _lastSnapshot: Date.now() };
+      state.tasks.set(task.id, merged);
+
+      const projectId = Number(merged.project_id);
+      if (Number.isFinite(projectId)) {
+        const ids = state.projectTasks.get(projectId) || [];
+        if (!ids.includes(merged.id)) state.projectTasks.set(projectId, [...ids, merged.id]);
+      }
+
+      if (Array.isArray(task.subtasks)) {
+        merged.subtasks = syncTaskSubtasks(task.id, task.subtasks);
+        state.tasks.set(task.id, merged);
+      } else {
+        merged.subtasks = materializeTaskSubtasks(task.id);
+        state.tasks.set(task.id, merged);
+      }
+
       if (state.activeTab === 'tasks') renderTasks();
       if (state.activeTab === 'projects') renderProjects();
       if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperations();
     }
 
     function addEventLog(kind, message, payload = {}, source = 'system') {
@@ -1130,6 +1411,7 @@
         renderEventLog();
       }
       if (!state.timelinePaused && state.activeTab === 'timeline') renderTimeline();
+      if (state.activeTab === 'operations') renderOperationsEventLog();
     }
 
     const WORKER_BUSY = new Set(['processing','turn_active','waiting_llm','agent_starting','processing_inbox','streaming','thinking','tool_running','waiting_response']);
@@ -1446,6 +1728,77 @@
       `).join('');
       const logBody = document.getElementById('logBody');
       logBody.scrollTop = logBody.scrollHeight;
+    }
+
+    function operationsLaneBuckets() {
+      const agents = [...state.agents.values()];
+      const coordinators = agents.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const running = agents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator' && WORKER_BUSY.has(a.fabric_status));
+      const idle = agents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator' && !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'offline' && a.fabric_status !== 'shutting_down');
+      const offline = agents.filter(a => a.fabric_status === 'offline' || a.fabric_status === 'shutting_down' || !a.process_alive);
+      return { coordinators, running, idle, offline };
+    }
+
+    function renderOperations() {
+      if (!refs.opsNavList || !refs.opsMainGrid) return;
+      const lanes = operationsLaneBuckets();
+      const laneDefs = [
+        { key: 'coordinators', label: 'Coordinators', icon: '👑' },
+        { key: 'running', label: 'Running Workers', icon: '⚡' },
+        { key: 'idle', label: 'Idle Workers', icon: '💤' },
+        { key: 'offline', label: 'Offline / History', icon: '🪫' },
+      ];
+
+      if (!lanes[state.operationsLane]) state.operationsLane = 'coordinators';
+
+      refs.opsAgentTotal.textContent = `${[...state.agents.values()].length} agents`;
+      refs.opsTasksCount.textContent = `Tasks: ${[...state.tasks.values()].length}`;
+      refs.opsProjectsCount.textContent = `Projects: ${[...state.projects.values()].length}`;
+
+      refs.opsNavList.innerHTML = laneDefs.map(({ key, label, icon }) => {
+        const count = lanes[key]?.length || 0;
+        return `<button class="ops-nav-item ${state.operationsLane === key ? 'active' : ''}" data-action="select-ops-lane" data-lane="${key}"><span>${icon} ${escapeHtml(label)}</span><span class="muted">${count}</span></button>`;
+      }).join('');
+
+      const selected = laneDefs.find(l => l.key === state.operationsLane);
+      const visible = lanes[state.operationsLane] || [];
+      refs.opsLaneTitle.textContent = `${selected?.icon || '🛰️'} ${selected?.label || 'Lane'}`;
+
+      if (!visible.length) {
+        refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">No agents in this lane.</div></article>`;
+      } else {
+        refs.opsMainGrid.innerHTML = visible.slice(0, 12).map((agent) => {
+          const current = agent.pm_task_title || agent.current_task || 'No task context';
+          return `<article class="ops-lane-card">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+              <strong>${escapeHtml(agent.agent_id)}</strong>
+              ${agentBadge(agentStatus(agent))}
+            </div>
+            <div class="muted" style="margin-top:4px;">${escapeHtml(agent.role || 'agent')} · ${escapeHtml(agent.model || '--')}</div>
+            <div class="muted" style="margin-top:6px;">${escapeHtml(String(current).slice(0, 120))}</div>
+          </article>`;
+        }).join('');
+      }
+
+      const acpAgent = state.acpSelectedAgentId ? state.agents.get(state.acpSelectedAgentId) : null;
+      refs.opsRailAgent.textContent = acpAgent ? acpAgent.agent_id : 'No agent selected';
+      refs.opsRailBody.innerHTML = acpAgent
+        ? `<div class="ops-lane-card"><strong>${escapeHtml(acpAgent.agent_id)}</strong><div class="muted">${escapeHtml(acpAgent.role || '--')} · ${escapeHtml(agentStatus(acpAgent))}</div><div class="muted">${escapeHtml(acpAgent.pm_task_title || acpAgent.current_task || 'No active task context')}</div></div><div class="ops-lane-card"><div class="muted">Chat placeholder bound to Agents panel. Use Agents tab to send mailbox messages.</div></div>`
+        : `<p class="muted">Reserved rail for selected agent details, quick controls, and live chat context.</p>`;
+
+      renderOperationsEventLog();
+    }
+
+    function renderOperationsEventLog() {
+      if (!refs.opsEventLogList || !refs.opsEventLogPanel) return;
+      refs.opsEventLogPanel.classList.toggle('collapsed', state.operationsLogCollapsed);
+      refs.opsEventLogList.innerHTML = state.logEvents.slice(-80).map(e => `
+        <li class="event-item">
+          <span class="event-time">${fmtDate(e.ts)}</span>
+          <b>${escapeHtml(e.kind)}</b> — ${escapeHtml(e.message)}
+        </li>
+      `).join('');
+      refs.opsEventLogList.scrollTop = refs.opsEventLogList.scrollHeight;
     }
 
     // ── Agent Control Panel ──
@@ -1781,6 +2134,7 @@
       });
       document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${tab}`));
 
+      if (tab === 'operations') renderOperations();
       if (tab === 'timeline') renderTimeline();
       if (tab === 'projects') renderProjects();
       if (tab === 'tasks') renderTasks();
@@ -1862,25 +2216,37 @@
       return await res.json();
     }
 
-    async function fetchDashboardSnapshot() {
+    async function fetchProjectsFallback() {
       try {
-        const filterParam = state.showOnlyActive ? '?filter=active' : '';
-        const snap = await fetchJson(`${API}/api/dashboard/snapshot${filterParam}`);
-        if (Array.isArray(snap.agents)) setAgents(snap.agents);
-        // Protect against backend stubs returning empty arrays when we already have data
-        if (Array.isArray(snap.projects) && (snap.projects.length > 0 || state.projects.size === 0)) {
-          setProjects(snap.projects);
+        const filter = state.showOnlyActive ? '?filter=active' : '';
+        const payload = await fetchJson(`${API}/api/projects/summary${filter}`);
+        const projects = Array.isArray(payload) ? payload : payload?.projects;
+        if (Array.isArray(projects)) {
+          setProjects(projects);
+          return;
         }
-        if (Array.isArray(snap.active_tasks) && (snap.active_tasks.length > 0 || state.tasks.size === 0)) {
-          setTasks(snap.active_tasks);
-        }
-        refs.lastSync.textContent = `Sync: ${nowStr()}`;
-      } catch (err) {
-        addEventLog('snapshot-error', `No se pudo sync dashboard: ${err.message}`, {}, 'system');
-      }
+      } catch {}
+
+      // Backward fallback for older monitor servers
+      try {
+        const filter = state.showOnlyActive ? '?filter=active' : '';
+        const payload = await fetchJson(`${API}/api/projects${filter}`);
+        const projects = Array.isArray(payload) ? payload : payload?.projects;
+        if (Array.isArray(projects)) setProjects(projects);
+      } catch {}
     }
 
     async function fetchAgentsFallback() {
+      try {
+        const payload = await fetchJson(`${API}/api/agents?hierarchy=true`);
+        const agents = Array.isArray(payload) ? payload : payload?.hierarchy || payload?.agents;
+        if (Array.isArray(agents) && agents.length) {
+          setAgents(agents);
+          return;
+        }
+      } catch {}
+
+      // Backward fallback for older monitor servers
       try {
         const payload = await fetchJson(`${API}/api/agents`);
         const agents = Array.isArray(payload) ? payload : payload?.agents;
@@ -1888,18 +2254,45 @@
       } catch {}
     }
 
+    async function refreshCoreData() {
+      try {
+        await Promise.all([fetchAgentsFallback(), fetchProjectsFallback(), fetchTasks()]);
+        refs.lastSync.textContent = `Sync: ${nowStr()}`;
+      } catch (err) {
+        addEventLog('refresh-error', `No se pudo sync dashboard core data: ${err.message}`, {}, 'system');
+      }
+    }
+
     async function fetchTasks(projectId = '') {
       try {
-        const filterParam = state.showOnlyActive ? '&filter=active' : (projectId ? '' : '?filter=');
-        const q = projectId ? `?project_id=${encodeURIComponent(projectId)}` : (filterParam ? filterParam : '');
+        const params = new URLSearchParams();
+        if (projectId) params.set('project_id', String(projectId));
+        if (state.showOnlyActive) params.set('filter', 'active');
+        params.set('include_subtasks', 'true');
+        const q = params.toString() ? `?${params.toString()}` : '';
         const tasks = await fetchJson(`${API}/api/tasks${q}`);
         if (Array.isArray(tasks)) {
-          // Merge instead of clear-all to prevent kanban flicker
+          for (const t of tasks) upsertTask(t);
+          if (state.activeTab === 'tasks') renderTasks();
+          return;
+        }
+      } catch (err) {
+        addEventLog('tasks-error', `No se pudo cargar tasks: ${err.message}`, {}, 'project');
+      }
+
+      // Backward fallback (without subtasks include)
+      try {
+        const params = new URLSearchParams();
+        if (projectId) params.set('project_id', String(projectId));
+        if (state.showOnlyActive) params.set('filter', 'active');
+        const q = params.toString() ? `?${params.toString()}` : '';
+        const tasks = await fetchJson(`${API}/api/tasks${q}`);
+        if (Array.isArray(tasks)) {
           for (const t of tasks) upsertTask(t);
           if (state.activeTab === 'tasks') renderTasks();
         }
       } catch (err) {
-        addEventLog('tasks-error', `No se pudo cargar tasks: ${err.message}`, {}, 'project');
+        addEventLog('tasks-fallback-error', `No se pudo cargar tasks fallback: ${err.message}`, {}, 'project');
       }
     }
 
@@ -2081,7 +2474,9 @@
 
       es.addEventListener('snapshot', (ev) => {
         const payload = parse(ev.data);
-        const agents = Array.isArray(payload) ? payload : payload?.agents;
+        const agents = Array.isArray(payload)
+          ? payload
+          : payload?.hierarchy || payload?.agents;
         if (Array.isArray(agents)) setAgents(agents);
         addEventLog('snapshot', 'Snapshot de agentes', payload, 'agent');
       });
@@ -2207,6 +2602,19 @@
 
       if (action === 'refresh-tasks') fetchTasks(refs.projectFilter.value);
 
+      if (action === 'select-ops-lane') {
+        state.operationsLane = el.dataset.lane || 'coordinators';
+        renderOperations();
+        return;
+      }
+
+      if (action === 'toggle-ops-log') {
+        state.operationsLogCollapsed = !state.operationsLogCollapsed;
+        renderOperationsEventLog();
+        el.textContent = state.operationsLogCollapsed ? 'Expand' : 'Collapse';
+        return;
+      }
+
       if (action === 'refresh-acp') {
         state.acpPaused = false;
         fetchAcpMessages();
@@ -2316,14 +2724,13 @@
 
     (async function init() {
       updateFilterToggleUI();
-      await fetchDashboardSnapshot();
-      await fetchTasks();
+      await refreshCoreData();
       setupSSE();
 
-      setInterval(fetchDashboardSnapshot, 10000); // full sync fallback
-      setInterval(fetchAgentsFallback, 10000);    // agents polling fallback
+      setInterval(refreshCoreData, 10000);        // API fallback without dashboard snapshot endpoint
       setInterval(() => { if (state.activeTab === 'tasks') fetchTasks(refs.projectFilter.value); }, 15000);
 
+      renderOperations();
       renderAgents();
       renderProjects();
       renderTasks();
