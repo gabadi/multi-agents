@@ -4,6 +4,7 @@
  */
 
 import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -204,29 +205,75 @@ export function readConfig(): TelegramConfig {
   };
 }
 
+function shouldFallbackToCurl(err: unknown): boolean {
+  const error = err as { message?: string; cause?: { code?: string; message?: string } } | undefined;
+  const message = String(error?.message || "");
+  const causeCode = String(error?.cause?.code || "");
+  const causeMessage = String(error?.cause?.message || "");
+  return (
+    causeCode === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    causeCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    causeCode === "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" ||
+    /self-signed certificate/i.test(causeMessage) ||
+    (/fetch failed/i.test(message) && /certificate|tls|ssl/i.test(causeMessage))
+  );
+}
+
+function telegramCurlRequest(url: string, body?: Record<string, unknown>): string {
+  const args = ["-sS", "-L"];
+  if (body) {
+    args.push("-X", "POST", "-H", "Content-Type: application/json", "--data-binary", JSON.stringify(body));
+  }
+  args.push(url);
+  return execFileSync("curl", args, {
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024,
+  });
+}
+
+async function telegramApiRequest(url: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<any> {
+  try {
+    const res = await fetch(url, body ? {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    } : { signal });
+    const raw = await res.text();
+
+    let data: any = null;
+    if (raw.trim()) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = null;
+      }
+    }
+
+    if (!res.ok) {
+      const details = data?.description || raw.trim() || "Telegram API error";
+      throw new Error(`HTTP ${res.status}: ${details}`);
+    }
+    if (!data) throw new Error("Telegram API returned empty or non-JSON body");
+    return data;
+  } catch (err) {
+    if (!shouldFallbackToCurl(err)) throw err;
+    const raw = telegramCurlRequest(url, body);
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error(`Telegram curl fallback returned non-JSON body: ${raw}`);
+    }
+  }
+}
+
 export async function tgGetUpdates(
   token: string,
   offset: number,
   signal: AbortSignal
 ): Promise<any[]> {
   const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&limit=10`;
-  const res = await fetch(url, { signal });
-  const raw = await res.text();
-
-  let data: any = null;
-  if (raw.trim()) {
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      data = null;
-    }
-  }
-
-  if (!res.ok) {
-    const details = data?.description || raw.trim() || "Telegram API error";
-    throw new Error(`HTTP ${res.status}: ${details}`);
-  }
-  if (!data) throw new Error("Telegram API returned empty or non-JSON body");
+  const data = await telegramApiRequest(url, undefined, signal);
   if (!data.ok) throw new Error(data.description || "Telegram API error");
   return data.result || [];
 }
@@ -252,22 +299,7 @@ export async function tgSendMessage(
     ...(options?.replyTo ? { reply_to_message_id: options.replyTo } : {}),
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const raw = await res.text();
-  if (!res.ok) throw new Error(`[telegram-bridge] sendMessage failed: HTTP ${res.status} ${raw}`);
-
-  let data: any;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(`[telegram-bridge] sendMessage returned non-JSON body: ${raw}`);
-  }
-
+  const data = await telegramApiRequest(url, body);
   if (data?.ok === false) {
     throw new Error(data.description || "Telegram API error");
   }
