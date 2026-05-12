@@ -2258,9 +2258,16 @@ type EnrichedSubtaskRow = SubtaskRow & {
 
 type EnrichedTaskRow = TaskRow & {
   agent_ids: string[];
+  runtime_session_agent_ids: string[];
+  runtime_task_agent_ids: string[];
+  runtime_worker_agent_ids: string[];
   ownership: {
     coordinator_agent_id: string | null;
     orchestrator_agent_id: string | null;
+    runtime_coordinator_agent_id: string | null;
+    runtime_orchestrator_agent_id: string | null;
+    effective_orchestrator_agent_id: string | null;
+    resolution: "pm" | "runtime_session";
   };
 };
 
@@ -2346,13 +2353,58 @@ function enrichSubtasks(db: DatabaseSync, subtasks: SubtaskRow[]): EnrichedSubta
   });
 }
 
+function getTaskRuntimeSessionAgents(task: TaskRow): MonitoredAgent[] {
+  const session = String(task.tmux_session ?? "").trim();
+  if (!session) return [];
+  return Array.from(agents.values()).filter((agent) => {
+    if (!agent || !agent.process_alive) return false;
+    if (agent.fabric_status === "offline" || agent.fabric_status === "shutting_down") return false;
+    return String(agent.session ?? "").trim() === session;
+  });
+}
+
 function enrichTask(task: TaskRow): EnrichedTaskRow {
+  const pmCoordinator = task.coordinator_agent_id;
+  const pmOrchestrator = task.orchestrator_agent_id;
+  const runtimeSessionAgents = getTaskRuntimeSessionAgents(task);
+  const runtimeSessionAgentIds = runtimeSessionAgents.map((a) => a.agent_id);
+
+  const runtimeCoordinator = runtimeSessionAgents.find((a) => a.role === "sub-coordinator")
+    ?? runtimeSessionAgents.find((a) => a.role === "coordinator")
+    ?? runtimeSessionAgents.find((a) => a.role === "secretary")
+    ?? null;
+
+  const runtimeWorkers = runtimeSessionAgents
+    .filter((a) => a.role !== "coordinator" && a.role !== "sub-coordinator" && a.role !== "secretary")
+    .map((a) => a.agent_id);
+
+  const pmOrchestratorRuntime = pmOrchestrator ? agents.get(pmOrchestrator) : undefined;
+  const pmOrchestratorAliveInSession = !!pmOrchestratorRuntime
+    && pmOrchestratorRuntime.process_alive
+    && String(pmOrchestratorRuntime.session ?? "").trim() === String(task.tmux_session ?? "").trim();
+
+  const effectiveOrchestrator = pmOrchestratorAliveInSession
+    ? pmOrchestrator
+    : (runtimeCoordinator?.agent_id ?? pmOrchestrator);
+
+  const runtimeTaskAgents = Array.from(new Set([
+    ...runtimeWorkers,
+    ...(runtimeCoordinator ? [runtimeCoordinator.agent_id] : []),
+  ]));
+
   return {
     ...task,
-    agent_ids: [task.coordinator_agent_id, task.orchestrator_agent_id].filter(Boolean) as string[],
+    agent_ids: [pmCoordinator, pmOrchestrator].filter(Boolean) as string[],
+    runtime_session_agent_ids: Array.from(new Set(runtimeSessionAgentIds)),
+    runtime_task_agent_ids: runtimeTaskAgents,
+    runtime_worker_agent_ids: Array.from(new Set(runtimeWorkers)),
     ownership: {
-      coordinator_agent_id: task.coordinator_agent_id,
-      orchestrator_agent_id: task.orchestrator_agent_id,
+      coordinator_agent_id: pmCoordinator,
+      orchestrator_agent_id: pmOrchestrator,
+      runtime_coordinator_agent_id: runtimeCoordinator?.agent_id ?? null,
+      runtime_orchestrator_agent_id: runtimeCoordinator?.agent_id ?? null,
+      effective_orchestrator_agent_id: effectiveOrchestrator ?? null,
+      resolution: pmOrchestratorAliveInSession || !runtimeCoordinator ? "pm" : "runtime_session",
     },
   };
 }
@@ -2546,6 +2598,8 @@ function serveApiProjectsSummary(res: ServerResponse, url: URL) {
         return acc;
       }, {});
       const ownership = Array.from(new Set(tasks.flatMap((task) => task.agent_ids).filter(Boolean)));
+      const runtimeOwnership = Array.from(new Set(tasks.flatMap((task) => task.runtime_task_agent_ids ?? []).filter(Boolean)));
+      const effectiveOwnership = Array.from(new Set([...ownership, ...runtimeOwnership].filter(Boolean)));
       const subtasks = tasks.flatMap((task) => task.subtasks ?? []);
       return {
         project_id: projectId,
@@ -2562,6 +2616,8 @@ function serveApiProjectsSummary(res: ServerResponse, url: URL) {
           return acc;
         }, {}),
         owner_agent_ids: ownership,
+        runtime_owner_agent_ids: runtimeOwnership,
+        effective_owner_agent_ids: effectiveOwnership,
       };
     });
 
@@ -2591,8 +2647,12 @@ function serveApiProjectById(res: ServerResponse, id: string, url: URL) {
 
     let payload: Record<string, unknown> = { project: tree.project, tasks };
     if (includeAgents) {
-      const agentIds = getAgentIdsForProject(getPmDb(), Number(id));
-      payload = { ...payload, include_agents: true, agents: resolveAgentStates(agentIds) };
+      const agentIds = new Set<string>(getAgentIdsForProject(getPmDb(), Number(id)));
+      for (const task of tasks) {
+        for (const aid of task.runtime_session_agent_ids ?? []) if (aid) agentIds.add(aid);
+        for (const aid of task.runtime_task_agent_ids ?? []) if (aid) agentIds.add(aid);
+      }
+      payload = { ...payload, include_agents: true, agents: resolveAgentStates(Array.from(agentIds)) };
     }
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(payload, null, 2));
@@ -2638,6 +2698,8 @@ function serveApiTaskById(res: ServerResponse, id: string, url: URL) {
     };
     if (includeAgents) {
       const agentIds = new Set<string>(taskData.agent_ids as string[]);
+      for (const aid of taskData.runtime_session_agent_ids ?? []) if (aid) agentIds.add(aid);
+      for (const aid of taskData.runtime_task_agent_ids ?? []) if (aid) agentIds.add(aid);
       for (const s of taskData.subtasks) {
         for (const aid of s.agent_ids) if (aid) agentIds.add(aid);
       }

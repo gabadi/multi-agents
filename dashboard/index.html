@@ -1238,6 +1238,9 @@
         agentIdleMs: 8 * 60 * 1000,
       },
       blockers: [],
+      operationsRailDraftByAgent: (persistedUiState.operationsRailDraftByAgent && typeof persistedUiState.operationsRailDraftByAgent === 'object')
+        ? persistedUiState.operationsRailDraftByAgent
+        : {},
     };
 
     function persistUiState(patch = {}) {
@@ -2188,8 +2191,11 @@
 
     function getTaskOwnership(task = {}) {
       const coordinator = task.coordinator_agent_id || task.coordinator_id || task.coordinator_agent || task.owner_agent_id || '--';
-      const orchestrator = task.orchestrator_agent_id || task.sub_coordinator_agent_id || task.subcoordinator_agent_id || task.sub_coordinator_id || task.orchestrator_id || '--';
-      return { coordinator, orchestrator };
+      const pmOrchestrator = task.orchestrator_agent_id || task.sub_coordinator_agent_id || task.subcoordinator_agent_id || task.sub_coordinator_id || task.orchestrator_id || '--';
+      const runtimeOrchestrator = task?.ownership?.runtime_orchestrator_agent_id || task?.ownership?.runtime_coordinator_agent_id || task.runtime_coordinator_agent_id || '--';
+      const effectiveOrchestrator = task?.ownership?.effective_orchestrator_agent_id || runtimeOrchestrator || pmOrchestrator || '--';
+      const resolution = task?.ownership?.resolution || ((effectiveOrchestrator && effectiveOrchestrator !== pmOrchestrator) ? 'runtime_session' : 'pm');
+      return { coordinator, orchestrator: effectiveOrchestrator || '--', pmOrchestrator, runtimeOrchestrator, resolution };
     }
 
     function normalizeAgentIdList(values = []) {
@@ -2279,8 +2285,11 @@
 
     function getTaskAgentIds(task = {}, subtasks = []) {
       const fromTask = Array.isArray(task.agent_ids) ? task.agent_ids : [];
+      const fromRuntime = Array.isArray(task.runtime_task_agent_ids)
+        ? task.runtime_task_agent_ids
+        : (Array.isArray(task.runtime_session_agent_ids) ? task.runtime_session_agent_ids : []);
       const fromSubtasks = subtasks.flatMap((s) => getSubtaskAssignees(s, task));
-      return [...new Set([...fromTask, ...fromSubtasks].filter(Boolean))];
+      return [...new Set([...fromTask, ...fromRuntime, ...fromSubtasks].filter(Boolean))];
     }
 
     function renderAgentQuickActions(agentIds = []) {
@@ -2342,7 +2351,7 @@
                 <span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>
                 ${taskStatusBadge(task.status)}
               </div>
-              <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}</div>
+              <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}${ownership.resolution === 'runtime_session' ? ' <span class="muted">(runtime)</span>' : ''}</div>
               <div class="ops-tree-subtasks">
                 ${subtasks.length ? subtasks.map((subtask) => {
                   const subtaskSelected = selected.type === 'subtask' && Number(selected.subtaskId) === Number(subtask.id);
@@ -2351,7 +2360,7 @@
                     <span>#${escapeHtml(subtask.id)} ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</span>
                     <span class="muted">${escapeHtml(subtask.status || 'pending')} · ${renderAgentJumpLinks(assigned || [])}</span>
                   </div>`;
-                }).join('') : '<div class="muted">No subtasks</div>'}
+                }).join('') : `<div class="muted">No subtasks</div>${(task.runtime_task_agent_ids || task.runtime_session_agent_ids || []).length ? `<div class="muted">runtime: ${renderAgentJumpLinks(task.runtime_task_agent_ids || task.runtime_session_agent_ids || [])}</div>` : ''}`}
               </div>
             </div>`;
           }).join('') : '<div class="muted">No tasks in project.</div>'}</div>` : ''}
@@ -2386,11 +2395,12 @@
               ${taskStatusBadge(task.status)}
             </div>
             <div class="ops-detail-kv">
-              <div><b>Coordinator:</b> ${escapeHtml(ownership.coordinator)}</div>
-              <div><b>Orchestrator/Sub-coordinator:</b> ${escapeHtml(ownership.orchestrator)}</div>
+              <div><b>Coordinator:</b> ${renderAgentJumpLink(ownership.coordinator)}</div>
+              <div><b>Orchestrator/Sub-coordinator:</b> ${renderAgentJumpLink(ownership.orchestrator)}${ownership.resolution === 'runtime_session' ? ` <span class="muted">(runtime override, pm=${escapeHtml(ownership.pmOrchestrator || '--')})</span>` : ''}</div>
               <div><b>Branch:</b> ${escapeHtml(infra.branch)}</div>
               <div><b>Worktree:</b> ${escapeHtml(infra.worktree)}</div>
               <div><b>tmux session:</b> ${escapeHtml(infra.tmuxSession)}</div>
+              <div><b>Runtime session agents:</b> ${renderAgentJumpLinks(task.runtime_session_agent_ids || task.runtime_task_agent_ids || [])}</div>
               <div><b>PR:</b> ${task.pr_url ? `<a href="${escapeHtml(task.pr_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(infra.pr)}</a>` : escapeHtml(infra.pr)}</div>
               <div><b>Dependencies:</b> ${renderTaskLinkList(dependencies, task.project_id)}</div>
               <div><b>Blocking:</b> ${renderTaskLinkList(dependents, task.project_id)}</div>
@@ -2479,8 +2489,8 @@
               const subtasks = getTaskSubtasksNormalized(task);
               return `<div class="ops-tree-task" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
                 <div class="ops-tree-task-head"><span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>${taskStatusBadge(task.status)}</div>
-                <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}</div>
-                <div class="muted">subtasks: ${subtasks.length}</div>
+                <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}${ownership.resolution === 'runtime_session' ? ' <span class="muted">(runtime)</span>' : ''}</div>
+                <div class="muted">subtasks: ${subtasks.length}${(task.runtime_task_agent_ids || task.runtime_session_agent_ids || []).length ? ` · runtime agents: ${escapeHtml((task.runtime_task_agent_ids || task.runtime_session_agent_ids || []).length)}` : ''}</div>
               </div>`;
             }).join('') : '<div class="muted">No tasks in current project.</div>'}
           </div>
@@ -2489,8 +2499,33 @@
     }
 
 
+    function getOperationsRailDraft(agentId) {
+      if (!agentId) return '';
+      return String(state.operationsRailDraftByAgent?.[agentId] || '');
+    }
+
+    function setOperationsRailDraft(agentId, text, { persist = true } = {}) {
+      if (!agentId) return;
+      const next = String(text || '');
+      if (!state.operationsRailDraftByAgent || typeof state.operationsRailDraftByAgent !== 'object') {
+        state.operationsRailDraftByAgent = {};
+      }
+      if (next) state.operationsRailDraftByAgent[agentId] = next;
+      else delete state.operationsRailDraftByAgent[agentId];
+      if (persist) persistUiState({ operationsRailDraftByAgent: state.operationsRailDraftByAgent });
+    }
+
+    function captureOperationsRailDraftFromDom() {
+      const input = document.getElementById('opsRailInput');
+      if (!input) return;
+      const agentId = state.acpSelectedAgentId || ensureAcpSelection();
+      if (!agentId) return;
+      setOperationsRailDraft(agentId, input.value, { persist: false });
+    }
+
     function renderOperationsRail() {
       if (!refs.opsRailBody || !refs.opsRailAgent) return;
+      captureOperationsRailDraftFromDom();
       const agentId = ensureAcpSelection();
       const agent = agentId ? state.agents.get(agentId) : null;
       refs.opsRailAgent.textContent = agent ? agent.agent_id : 'No agent selected';
@@ -2533,6 +2568,8 @@
         </div>
       `;
 
+      const input = document.getElementById('opsRailInput');
+      if (input) input.value = getOperationsRailDraft(agent.agent_id);
       const msgBox = document.getElementById('opsRailMessages');
       if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
     }
@@ -2830,11 +2867,12 @@
 
     async function sendAcpMessage(type = 'chat', extra = {}) {
       const agentId = ensureAcpSelection();
-      if (!agentId) return;
+      if (!agentId) return false;
       const text = String(extra.text ?? refs.acpInput.value ?? '').trim();
-      if (!text) return;
+      if (!text) return false;
       state.acpSending = true;
       renderAcpWorkspace();
+      let sent = false;
       try {
         const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/message`, {
           method: 'POST',
@@ -2844,6 +2882,7 @@
         addAcpHumanMessage(agentId, text, { id: data.messageId, type, status: data.note || 'sent' });
         if (!extra.text) refs.acpInput.value = '';
         addEventLog('acp-message', `${type} enviado a ${agentId}`, { agent_id: agentId, ...data }, 'agent');
+        sent = true;
       } catch (err) {
         addAcpHumanMessage(agentId, text, { type, status: `error: ${err.message}` });
         addEventLog('acp-message-error', `No se pudo enviar a ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
@@ -2852,6 +2891,7 @@
         renderAcpWorkspace();
         if (state.activeTab === 'operations') renderOperationsRail();
       }
+      return sent;
     }
 
     function openAcpTaskModal() {
@@ -3189,7 +3229,7 @@
           <div><b>worktree:</b> ${escapeHtml(t.worktree_path || '--')}</div>
           <div><b>tmux_session:</b> ${escapeHtml(t.tmux_session || '--')}</div>
           <div><b>coordinator:</b> ${renderAgentJumpLink(getTaskOwnership(t).coordinator)}</div>
-          <div><b>orchestrator/subcoord:</b> ${renderAgentJumpLink(getTaskOwnership(t).orchestrator)}</div>
+          <div><b>orchestrator/subcoord:</b> ${renderAgentJumpLink(getTaskOwnership(t).orchestrator)}${getTaskOwnership(t).resolution === 'runtime_session' ? ` <span class="muted">(runtime override, pm=${escapeHtml(getTaskOwnership(t).pmOrchestrator || '--')})</span>` : ''}</div>
           <div><b>asana:</b> ${t.asana_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.asana_url)}">link</a>` : '--'}</div>
           <div><b>PR:</b> ${t.pr_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.pr_url)}">link</a> ${taskStatusBadge(t.pr_status || (t.status?.startsWith('pr_') ? t.status : ''))}` : '--'}</div>
         </div>
@@ -3556,8 +3596,14 @@
         state.acpSelectedAgentId = agentId;
         localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
         persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
-        await sendAcpMessage('chat', { text });
-        if (input) input.value = '';
+        setOperationsRailDraft(agentId, text, { persist: false });
+        const sent = await sendAcpMessage('chat', { text });
+        if (sent) {
+          setOperationsRailDraft(agentId, '');
+          if (input) input.value = '';
+        } else {
+          setOperationsRailDraft(agentId, text);
+        }
         renderOperationsRail();
         return;
       }
@@ -3657,6 +3703,13 @@
         }
       });
     }
+    document.addEventListener('input', (e) => {
+      const input = e.target?.id === 'opsRailInput' ? e.target : null;
+      if (!input) return;
+      const agentId = state.acpSelectedAgentId || ensureAcpSelection();
+      if (!agentId) return;
+      setOperationsRailDraft(agentId, input.value, { persist: false });
+    });
     [refs.tfAgents, refs.tfProjects, refs.tfErrors, refs.tfPRs].forEach(chk => chk.addEventListener('change', renderTimeline));
     refs.modal.addEventListener('click', (e) => {
       if (e.target === refs.modal) closeModal();
