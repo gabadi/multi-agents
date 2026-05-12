@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 import { DatabaseSync } from "node:sqlite";
-import { execSync, spawn } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -531,6 +531,21 @@ function toOptionalNumber(value: unknown): number | null {
 
 function isTerminalCompletionStatus(value: unknown): value is TerminalCompletionStatus {
   return value === "done" || value === "failed" || value === "blocked";
+}
+
+function normalizeAcceptanceCriteriaInput(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        const description = (item as { description?: unknown }).description;
+        if (typeof description === "string") return description.trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function shellEscape(value: string): string {
@@ -2574,7 +2589,12 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
       title: Type.String({ description: "Título de la tarea" }),
       description: Type.Optional(Type.String({ description: "Descripción de la tarea" })),
       context_capsule: Type.Optional(Type.String({ description: "Context capsule inicial para análisis v1" })),
-      acceptance_criteria: Type.Optional(Type.Array(Type.String(), { description: "Acceptance criteria textuales opcionales" })),
+      acceptance_criteria: Type.Optional(Type.Array(Type.Union([
+        Type.String(),
+        Type.Object({
+          description: Type.String({ description: "Acceptance criterion description" }),
+        }, { additionalProperties: true }),
+      ]), { description: "Acceptance criteria textuales opcionales" })),
       keywords: Type.Optional(Type.Array(Type.String(), { description: "Keywords para el análisis inicial" })),
       mode: Type.Optional(Type.String({ description: "preview | commit" })),
       behavior: Type.Optional(Type.String({ description: "create_only | create_and_kickoff (default if omitted: create_and_kickoff)" })),
@@ -2602,7 +2622,7 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
         title: params.title,
         description: params.description ?? undefined,
         context_capsule: params.context_capsule ?? undefined,
-        acceptance_criteria: params.acceptance_criteria ?? undefined,
+        acceptance_criteria: normalizeAcceptanceCriteriaInput(params.acceptance_criteria),
         keywords: params.keywords ?? undefined,
         confirm_repo_local_path: params.confirm_repo_local_path ?? undefined,
         project_id: params.project_id ?? undefined,
@@ -2823,11 +2843,12 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
         const launchReportTo = toOptionalString(input.coordinator_agent_id) ?? AGENT_ID ?? "boss";
         const parentAgentId = AGENT_ID || launchReportTo;
         const cmdParts = [
-          "npx", "tsx", launcherPath,
+          "tsx", launcherPath,
           `--role=sub-coordinator`,
           `--agent-id=${kickoffAgentId}`,
           `--mode=interactive`,
           `--session=${kickoffSession}`,
+          `--force-session`,
           `--task-id=${created.task.id}`,
           `--workspace-dir=${worktreePath}`,
           `--report-to=${launchReportTo}`,
@@ -2837,20 +2858,31 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
         const logDir = `${FABRIC_DIR}/launch-logs`;
         mkdirSync(logDir, { recursive: true });
         const logPath = `${logDir}/${kickoffAgentId}-${Date.now()}.log`;
-        const logFd = openSync(logPath, "a");
         let launcherPid: number | undefined;
-        try {
-          const launchEnv = { ...process.env, ENABLE_CMD_CENTER: "TRUE" };
-          delete launchEnv.TMUX;
-          const proc = spawn(cmdParts[0], cmdParts.slice(1), {
-            detached: true,
-            stdio: ["ignore", logFd, logFd],
-            env: launchEnv,
-          });
-          proc.unref();
-          launcherPid = proc.pid;
-        } finally {
-          closeSync(logFd);
+        const ackTimeoutMs = Math.max(1000, Number(process.env.FABRIC_ALIVE_ACK_TIMEOUT_MS || "45000") || 45000);
+        const launchEnv = { ...process.env, ENABLE_CMD_CENTER: "TRUE" };
+        delete launchEnv.TMUX;
+        const launchResult = spawnSync("npx", cmdParts, {
+          env: launchEnv,
+          encoding: "utf8",
+          timeout: Math.max(ackTimeoutMs + 15000, 60000),
+          maxBuffer: 10 * 1024 * 1024,
+        });
+        const stdout = launchResult.stdout ?? "";
+        const stderr = launchResult.stderr ?? "";
+        const combinedLaunchOutput = [stdout, stderr].filter(Boolean).join(stdout && stderr ? "\n" : "");
+        writeFileSync(logPath, combinedLaunchOutput ? `${combinedLaunchOutput}${combinedLaunchOutput.endsWith("\n") ? "" : "\n"}` : "", "utf8");
+
+        if (typeof (launchResult as { pid?: unknown }).pid === "number") {
+          launcherPid = (launchResult as { pid?: number }).pid;
+        }
+
+        const launcherTail = combinedLaunchOutput.trim().split(/\r?\n/).slice(-20).join(" | ");
+        if (launchResult.error) {
+          throw new Error(`Kickoff launcher failed for task ${created.task.id}: ${launchResult.error.message}. launch_log=${logPath}${launcherTail ? ` tail=${launcherTail}` : ""}`);
+        }
+        if ((launchResult.status ?? 0) !== 0) {
+          throw new Error(`Kickoff launcher exited with code ${launchResult.status ?? "null"} for task ${created.task.id}. launch_log=${logPath}${launcherTail ? ` tail=${launcherTail}` : ""}`);
         }
 
         const kickoffTaskContext = buildTaskContextForAgent(
