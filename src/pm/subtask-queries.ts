@@ -1,11 +1,35 @@
 import { DatabaseSync } from "node:sqlite";
 
-export interface ReadySubtask {
+interface ReadySubtaskRow {
   id: number;
   title: string;
+  description: string | null;
   task_id: number;
   priority: number;
   sequence_order: number;
+  required_role: string | null;
+  acceptance_criteria_json: string | null;
+  attempt_count: number | null;
+  max_attempts: number | null;
+}
+
+export interface ReadySubtask {
+  id: number;
+  title: string;
+  description?: string;
+  task_id: number;
+  priority: number;
+  sequence_order: number;
+  required_role?: string;
+  acceptance_criteria?: Array<{
+    id: string;
+    description: string;
+    type: string;
+    params: Record<string, unknown>;
+    required: boolean;
+  }>;
+  attempt_count: number;
+  max_attempts: number;
 }
 
 export interface RoleCount {
@@ -13,21 +37,36 @@ export interface RoleCount {
   count: number;
 }
 
+function parseAcceptanceCriteria(raw: string | null): ReadySubtask["acceptance_criteria"] {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Returns all subtasks with status='backlog' or 'ready' that have NO blocking
- * unmet dependencies. A blocking dependency is a row in subtask_dependencies
- * with dependency_type='blocking' where the depended-on subtask status is NOT 'done'.
+ * unmet dependencies and still have attempts remaining.
  */
 export function findReadySubtasks(db: DatabaseSync): ReadySubtask[] {
   const sql = `
     SELECT
       s.id,
       s.title,
+      s.description,
       s.task_id,
       s.priority,
-      s.sequence_order
+      s.sequence_order,
+      s.required_role,
+      s.acceptance_criteria_json,
+      s.attempt_count,
+      s.max_attempts
     FROM subtasks s
     WHERE s.status IN ('backlog', 'ready')
+      AND COALESCE(s.attempt_count, 0) < COALESCE(s.max_attempts, 2)
       AND NOT EXISTS (
         SELECT 1
         FROM subtask_dependencies d
@@ -38,7 +77,23 @@ export function findReadySubtasks(db: DatabaseSync): ReadySubtask[] {
       )
     ORDER BY s.priority DESC, s.sequence_order ASC
   `;
-  return db.prepare(sql).all() as ReadySubtask[];
+
+  const rows = db.prepare(sql).all() as ReadySubtaskRow[];
+  return rows.map((row) => {
+    const acceptanceCriteria = parseAcceptanceCriteria(row.acceptance_criteria_json);
+    return {
+      id: row.id,
+      title: row.title,
+      ...(row.description ? { description: row.description } : {}),
+      task_id: row.task_id,
+      priority: row.priority,
+      sequence_order: row.sequence_order,
+      ...(row.required_role ? { required_role: row.required_role } : {}),
+      ...(acceptanceCriteria ? { acceptance_criteria: acceptanceCriteria } : {}),
+      attempt_count: row.attempt_count ?? 0,
+      max_attempts: row.max_attempts ?? 2,
+    };
+  });
 }
 
 /**

@@ -154,7 +154,7 @@ describe("assignSubtask", () => {
     cleanup();
   });
 
-  test("updates subtask status and inserts assignment record", () => {
+  test("updates subtask status, increments attempts, and inserts assignment record", () => {
     const db = setupPmDb();
 
     // Seed project + task + subtask
@@ -182,10 +182,12 @@ describe("assignSubtask", () => {
     assignSubtask(db, subtask.id, "worker-42", "dev");
 
     const row = db
-      .prepare(`SELECT status, worker_agent_id FROM subtasks WHERE id = ?`)
-      .get(subtask.id) as { status: string; worker_agent_id: string };
+      .prepare(`SELECT status, worker_agent_id, attempt_count, last_error FROM subtasks WHERE id = ?`)
+      .get(subtask.id) as { status: string; worker_agent_id: string; attempt_count: number; last_error: string | null };
     assert.strictEqual(row.status, "running");
     assert.strictEqual(row.worker_agent_id, "worker-42");
+    assert.strictEqual(row.attempt_count, 1);
+    assert.strictEqual(row.last_error, null);
 
     const assign = db
       .prepare(
@@ -203,6 +205,47 @@ describe("assignSubtask", () => {
     db.close();
     cleanup();
   });
+
+  test("reuses the worker assignment row on retry", () => {
+    const db = setupPmDb();
+
+    db.prepare(`INSERT INTO projects (name, code, status) VALUES (?, ?, ?)`).run("Test", "TST-R", "active");
+    const project = db.prepare(`SELECT id FROM projects WHERE code = ?`).get("TST-R") as { id: number };
+
+    db.prepare(`INSERT INTO tasks (project_id, title, status) VALUES (?, ?, ?)`).run(project.id, "Retry Task", "in_progress");
+    const task = db.prepare(`SELECT id FROM tasks WHERE title = ?`).get("Retry Task") as { id: number };
+
+    db.prepare(`INSERT INTO subtasks (task_id, title, status, attempt_count) VALUES (?, ?, ?, ?)`)
+      .run(task.id, "Retry Sub", "ready", 1);
+    const subtask = db.prepare(`SELECT id FROM subtasks WHERE title = ?`).get("Retry Sub") as { id: number };
+
+    db.prepare(
+      `INSERT INTO subtask_assignments (subtask_id, agent_id, assignment_type, status, result_summary, completed_at)
+       VALUES (?, ?, 'worker', 'failed', 'boom', datetime('now'))`
+    ).run(subtask.id, "worker-old");
+
+    assignSubtask(db, subtask.id, "worker-new", "reviewer");
+
+    const row = db
+      .prepare(`SELECT status, worker_agent_id, attempt_count, completed_at FROM subtasks WHERE id = ?`)
+      .get(subtask.id) as { status: string; worker_agent_id: string; attempt_count: number; completed_at: string | null };
+    assert.strictEqual(row.status, "running");
+    assert.strictEqual(row.worker_agent_id, "worker-new");
+    assert.strictEqual(row.attempt_count, 2);
+    assert.strictEqual(row.completed_at, null);
+
+    const assignments = db
+      .prepare(`SELECT agent_id, status, completed_at, result_summary FROM subtask_assignments WHERE subtask_id = ? AND assignment_type = 'worker'`)
+      .all(subtask.id) as Array<{ agent_id: string; status: string; completed_at: string | null; result_summary: string | null }>;
+    assert.strictEqual(assignments.length, 1);
+    assert.strictEqual(assignments[0].agent_id, "worker-new");
+    assert.strictEqual(assignments[0].status, "active");
+    assert.strictEqual(assignments[0].completed_at, null);
+    assert.strictEqual(assignments[0].result_summary, null);
+
+    db.close();
+    cleanup();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -214,7 +257,7 @@ describe("handleLaunchError", () => {
     cleanup();
   });
 
-  test("updates subtask to failed with error summary", () => {
+  test("updates subtask to failed with error summary and last_error", () => {
     const db = setupPmDb();
 
     db.prepare(
@@ -241,10 +284,11 @@ describe("handleLaunchError", () => {
     handleLaunchError(db, subtask.id, "spawn EACCES");
 
     const row = db
-      .prepare(`SELECT status, result_summary FROM subtasks WHERE id = ?`)
-      .get(subtask.id) as { status: string; result_summary: string };
+      .prepare(`SELECT status, result_summary, last_error FROM subtasks WHERE id = ?`)
+      .get(subtask.id) as { status: string; result_summary: string; last_error: string };
     assert.strictEqual(row.status, "failed");
     assert.strictEqual(row.result_summary, "spawn EACCES");
+    assert.strictEqual(row.last_error, "spawn EACCES");
 
     db.close();
     cleanup();

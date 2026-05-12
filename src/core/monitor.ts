@@ -1142,6 +1142,14 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body, null, 2));
 }
 
+function sendGone(res: ServerResponse, removedRoute: string, replacement?: string) {
+  sendJson(res, 410, {
+    error: "route_removed_monitor_v2_hard_cut",
+    removed_route: removedRoute,
+    replacement: replacement ?? null,
+  });
+}
+
 function readJsonBody(req: IncomingMessage, maxBytes = 256 * 1024): Promise<any> {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -1605,14 +1613,165 @@ function serveDashboard(res: ServerResponse) {
   }
 }
 
-function serveApiAgents(res: ServerResponse) {
-  // Memory-first: use in-memory Map. DB syncs in background.
-  const all = Array.from(agents.values()).map((a) => ({ ...a }));
-  res.writeHead(200, {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
+function parseQueryInt(value: string | null): number | null {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.trunc(parsed);
+}
+
+function parseTaskIdFromCurrentTask(currentTask: string | null): number | null {
+  if (!currentTask) return null;
+  const direct = parseQueryInt(currentTask);
+  if (direct) return direct;
+  const match = currentTask.match(/(\d+)/);
+  if (!match) return null;
+  return parseQueryInt(match[1]);
+}
+
+function buildAgentsHierarchySnapshot(): {
+  items: Array<MonitoredAgent & { parent_agent_id: string | null; children_count: number }>;
+  invariants: {
+    secretary_under_subcoordinator_ok: boolean;
+    violations: Array<{ agent_id: string; reason: string; parent_agent_id: string | null }>;
+  };
+} {
+  const allAgents = Array.from(agents.values()).map((a) => ({ ...a }));
+  const parentByAgent = new Map<string, string>();
+
+  try {
+    const db = getPmDb();
+
+    const taskRows = db.prepare(`
+      SELECT id, coordinator_agent_id, orchestrator_agent_id
+      FROM tasks
+      ORDER BY id ASC
+    `).all() as Array<{ id: number; coordinator_agent_id: string | null; orchestrator_agent_id: string | null }>;
+
+    for (const row of taskRows) {
+      const coordinatorId = row.coordinator_agent_id?.trim();
+      const orchestratorId = row.orchestrator_agent_id?.trim();
+      if (!coordinatorId || !orchestratorId) continue;
+      if (!parentByAgent.has(orchestratorId)) {
+        parentByAgent.set(orchestratorId, coordinatorId);
+      }
+    }
+
+    const subtaskRows = db.prepare(`
+      SELECT s.worker_agent_id, s.qa_agent_id, t.orchestrator_agent_id
+      FROM subtasks s
+      JOIN tasks t ON t.id = s.task_id
+    `).all() as Array<{
+      worker_agent_id: string | null;
+      qa_agent_id: string | null;
+      orchestrator_agent_id: string | null;
+    }>;
+
+    for (const row of subtaskRows) {
+      const orchestratorId = row.orchestrator_agent_id?.trim();
+      if (!orchestratorId) continue;
+      const workerId = row.worker_agent_id?.trim();
+      const qaId = row.qa_agent_id?.trim();
+      if (workerId && !parentByAgent.has(workerId)) parentByAgent.set(workerId, orchestratorId);
+      if (qaId && !parentByAgent.has(qaId)) parentByAgent.set(qaId, orchestratorId);
+    }
+
+    const taskToOrchestrator = new Map<number, string>();
+    for (const row of taskRows) {
+      const orchestratorId = row.orchestrator_agent_id?.trim();
+      if (orchestratorId) taskToOrchestrator.set(row.id, orchestratorId);
+    }
+
+    const subCoordinators = allAgents.filter((a) => a.role === "sub-coordinator");
+    for (const secretary of allAgents.filter((a) => a.role === "secretary")) {
+      if (parentByAgent.has(secretary.agent_id)) continue;
+
+      let parent: string | null = null;
+      const taskId = parseTaskIdFromCurrentTask(secretary.current_task);
+      if (taskId != null) {
+        parent = taskToOrchestrator.get(taskId) ?? null;
+      }
+
+      if (!parent && secretary.session) {
+        const bySession = subCoordinators.find((sub) => sub.session && sub.session === secretary.session);
+        if (bySession) parent = bySession.agent_id;
+      }
+
+      if (!parent && subCoordinators.length === 1) {
+        parent = subCoordinators[0].agent_id;
+      }
+
+      if (parent) parentByAgent.set(secretary.agent_id, parent);
+    }
+  } catch {
+    // Best effort. If PM DB is unavailable, fallback to flat list with null parents.
+  }
+
+  const childrenCountByAgent = new Map<string, number>();
+  for (const parentAgentId of parentByAgent.values()) {
+    childrenCountByAgent.set(parentAgentId, (childrenCountByAgent.get(parentAgentId) ?? 0) + 1);
+  }
+
+  const roleByAgentId = new Map(allAgents.map((a) => [a.agent_id, a.role]));
+  const items = allAgents.map((agent) => {
+    const parentAgentId = parentByAgent.get(agent.agent_id) ?? null;
+    return {
+      ...agent,
+      parent_agent_id: parentAgentId,
+      children_count: childrenCountByAgent.get(agent.agent_id) ?? 0,
+    };
   });
-  res.end(JSON.stringify(all, null, 2));
+
+  const violations = items
+    .filter((item) => item.role === "secretary")
+    .map((item) => {
+      const parentRole = item.parent_agent_id ? roleByAgentId.get(item.parent_agent_id) : null;
+      if (!item.parent_agent_id) {
+        return {
+          agent_id: item.agent_id,
+          reason: "secretary_missing_parent",
+          parent_agent_id: null,
+        };
+      }
+      if (parentRole !== "sub-coordinator") {
+        return {
+          agent_id: item.agent_id,
+          reason: `secretary_parent_not_subcoordinator:${parentRole ?? "unknown"}`,
+          parent_agent_id: item.parent_agent_id,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as Array<{ agent_id: string; reason: string; parent_agent_id: string | null }>;
+
+  return {
+    items,
+    invariants: {
+      secretary_under_subcoordinator_ok: violations.length === 0,
+      violations,
+    },
+  };
+}
+
+function serveApiAgents(res: ServerResponse, url: URL) {
+  const hierarchy = url.searchParams.get("hierarchy") === "true";
+  const snapshot = buildAgentsHierarchySnapshot();
+
+  if (hierarchy) {
+    const ok = snapshot.invariants.secretary_under_subcoordinator_ok;
+    sendJson(res, ok ? 200 : 409, {
+      ok,
+      ...snapshot,
+    });
+    return;
+  }
+
+  // Legacy flat shape for callers that don't ask hierarchy explicitly.
+  sendJson(res, 200, snapshot.items.map(({ parent_agent_id, children_count, ...agent }) => ({
+    ...agent,
+    parent_agent_id,
+    children_count,
+  })));
 }
 
 function serveApiAgentOutputs(res: ServerResponse, agentId: string, url: URL) {
@@ -2337,11 +2496,57 @@ function serveApiProjects(res: ServerResponse, url: URL) {
     const filter = url.searchParams.get("filter");
     const filters = filter === "active" ? { status: "active" } : undefined;
     const data = getProjects(filters);
-    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(JSON.stringify(data, null, 2));
+    sendJson(res, 200, data);
   } catch (err) {
-    res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(JSON.stringify({ error: String(err) }));
+    sendJson(res, 500, { error: String(err) });
+  }
+}
+
+function serveApiProjectsSummary(res: ServerResponse) {
+  try {
+    const db = getPmDb();
+    const rows = db.prepare(`
+      SELECT
+        p.id AS project_id,
+        p.code AS code,
+        p.name AS name,
+        SUM(CASE WHEN t.status = 'draft' THEN 1 ELSE 0 END) AS tasks_draft,
+        SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) AS tasks_in_progress,
+        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS tasks_completed,
+        SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) AS tasks_failed,
+        COUNT(st.id) AS subtask_count
+      FROM projects p
+      LEFT JOIN tasks t ON t.project_id = p.id
+      LEFT JOIN subtasks st ON st.task_id = t.id
+      GROUP BY p.id
+      ORDER BY p.created_at DESC
+    `).all() as Array<{
+      project_id: number;
+      code: string | null;
+      name: string;
+      tasks_draft: number;
+      tasks_in_progress: number;
+      tasks_completed: number;
+      tasks_failed: number;
+      subtask_count: number;
+    }>;
+
+    const items = rows.map((row) => ({
+      project_id: row.project_id,
+      code: row.code,
+      name: row.name,
+      task_counts: {
+        draft: Number(row.tasks_draft ?? 0),
+        in_progress: Number(row.tasks_in_progress ?? 0),
+        completed: Number(row.tasks_completed ?? 0),
+        failed: Number(row.tasks_failed ?? 0),
+      },
+      subtask_count: Number(row.subtask_count ?? 0),
+    }));
+
+    sendJson(res, 200, { items });
+  } catch (err) {
+    sendJson(res, 500, { error: String(err) });
   }
 }
 
@@ -2377,17 +2582,135 @@ function serveApiProjectById(res: ServerResponse, id: string, url: URL) {
 
 function serveApiTasks(res: ServerResponse, url: URL) {
   try {
-    const filters: { project_id?: number; status?: string; agent_id?: string; active_only?: boolean } = {};
-    if (url.searchParams.has("project_id")) filters.project_id = Number(url.searchParams.get("project_id"));
-    if (url.searchParams.has("status")) filters.status = url.searchParams.get("status")!;
-    if (url.searchParams.has("agent_id")) filters.agent_id = url.searchParams.get("agent_id")!;
-    if (url.searchParams.get("filter") === "active") filters.active_only = true;
-    const data = getTasks(filters);
-    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(JSON.stringify(data, null, 2));
+    const db = getPmDb();
+    const projectId = parseQueryInt(url.searchParams.get("project_id"));
+    const taskId = parseQueryInt(url.searchParams.get("task_id"));
+    const status = (url.searchParams.get("status") || "").trim() || null;
+    const q = (url.searchParams.get("q") || "").trim() || null;
+    const includeSubtasks = url.searchParams.get("include_subtasks") === "true";
+
+    const conditions: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (projectId != null) {
+      conditions.push("t.project_id = ?");
+      params.push(projectId);
+    }
+    if (taskId != null) {
+      conditions.push("t.id = ?");
+      params.push(taskId);
+    }
+    if (status) {
+      conditions.push("t.status = ?");
+      params.push(status);
+    }
+    if (q) {
+      conditions.push("(t.title LIKE ? OR COALESCE(t.description, '') LIKE ?)");
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const tasks = db.prepare(`
+      SELECT t.*
+      FROM tasks t
+      ${where}
+      ORDER BY t.sequence_order ASC, t.id ASC
+    `).all(...params) as TaskRow[];
+
+    const subtasksByTaskId = new Map<number, Array<SubtaskRow & {
+      assignment_type: string | null;
+      assignment_types: string[];
+      depends_on: number[];
+      agent_ids: string[];
+    }>>();
+
+    if (includeSubtasks && tasks.length > 0) {
+      const taskIds = tasks.map((task) => task.id);
+      const placeholders = taskIds.map(() => "?").join(",");
+
+      const subtasks = db.prepare(`
+        SELECT s.*
+        FROM subtasks s
+        WHERE s.task_id IN (${placeholders})
+        ORDER BY s.task_id ASC, s.priority DESC, s.sequence_order ASC
+      `).all(...taskIds) as SubtaskRow[];
+
+      const subtaskIds = subtasks.map((subtask) => subtask.id);
+      const dependenciesBySubtaskId = new Map<number, number[]>();
+      const assignmentTypesBySubtaskId = new Map<number, string[]>();
+
+      if (subtaskIds.length > 0) {
+        const depPlaceholders = subtaskIds.map(() => "?").join(",");
+        const dependencyRows = db.prepare(`
+          SELECT subtask_id, depends_on_subtask_id
+          FROM subtask_dependencies
+          WHERE subtask_id IN (${depPlaceholders})
+          ORDER BY subtask_id ASC, depends_on_subtask_id ASC
+        `).all(...subtaskIds) as Array<{ subtask_id: number; depends_on_subtask_id: number }>;
+
+        for (const row of dependencyRows) {
+          const existing = dependenciesBySubtaskId.get(row.subtask_id) ?? [];
+          existing.push(row.depends_on_subtask_id);
+          dependenciesBySubtaskId.set(row.subtask_id, existing);
+        }
+
+        const assignmentRows = db.prepare(`
+          SELECT subtask_id, assignment_type
+          FROM subtask_assignments
+          WHERE subtask_id IN (${depPlaceholders})
+            AND status = 'active'
+          ORDER BY subtask_id ASC, assignment_type ASC
+        `).all(...subtaskIds) as Array<{ subtask_id: number; assignment_type: string }>;
+
+        for (const row of assignmentRows) {
+          const existing = assignmentTypesBySubtaskId.get(row.subtask_id) ?? [];
+          existing.push(row.assignment_type);
+          assignmentTypesBySubtaskId.set(row.subtask_id, existing);
+        }
+      }
+
+      for (const subtask of subtasks) {
+        const assignmentTypes = assignmentTypesBySubtaskId.get(subtask.id) ?? [];
+        const mapped = {
+          ...subtask,
+          assignment_type: assignmentTypes[0] ?? null,
+          assignment_types: assignmentTypes,
+          depends_on: dependenciesBySubtaskId.get(subtask.id) ?? [],
+          agent_ids: [subtask.worker_agent_id, subtask.qa_agent_id].filter(Boolean) as string[],
+        };
+
+        const bucket = subtasksByTaskId.get(subtask.task_id) ?? [];
+        bucket.push(mapped);
+        subtasksByTaskId.set(subtask.task_id, bucket);
+      }
+    }
+
+    const items = tasks.map((task) => {
+      const base = {
+        ...task,
+        owner_agent_id: task.orchestrator_agent_id ?? task.coordinator_agent_id ?? null,
+        agent_ids: [task.coordinator_agent_id, task.orchestrator_agent_id].filter(Boolean) as string[],
+      } as Record<string, unknown>;
+
+      if (includeSubtasks) {
+        base.subtasks = subtasksByTaskId.get(task.id) ?? [];
+      }
+
+      return base;
+    });
+
+    sendJson(res, 200, {
+      items,
+      filters: {
+        project_id: projectId,
+        task_id: taskId,
+        status,
+        q,
+        include_subtasks: includeSubtasks,
+      },
+    });
   } catch (err) {
-    res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(JSON.stringify({ error: String(err) }));
+    sendJson(res, 500, { error: String(err) });
   }
 }
 
@@ -2771,7 +3094,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   } else if (agentMessageMatch && req.method === "POST") {
     await serveApiAgentMessage(res, req, decodeURIComponent(agentMessageMatch[1]));
   } else if (url.pathname === "/api/agents" && req.method === "GET") {
-    serveApiAgents(res);
+    serveApiAgents(res, url);
   } else if (url.pathname === "/api/metrics" && req.method === "GET") {
     serveApiMetrics(res);
   } else if (url.pathname === "/api/events" && req.method === "GET") {
@@ -2785,24 +3108,24 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   } else if (url.pathname.startsWith("/api/healthcheck/") && req.method === "POST") {
     const agentId = url.pathname.slice("/api/healthcheck/".length);
     serveApiHealthcheck(res, agentId);
+  } else if (url.pathname === "/api/projects/summary" && req.method === "GET") {
+    serveApiProjectsSummary(res);
   } else if (url.pathname === "/api/projects" && req.method === "GET") {
-    serveApiProjects(res, url);
+    sendGone(res, "/api/projects", "/api/projects/summary");
   } else if (url.pathname.startsWith("/api/projects/") && req.method === "GET") {
-    const id = url.pathname.split("/")[3];
-    serveApiProjectById(res, id, url);
+    sendGone(res, "/api/projects/:id", "/api/projects/summary");
   } else if (url.pathname === "/api/tasks" && req.method === "GET") {
     serveApiTasks(res, url);
   } else if (url.pathname.startsWith("/api/tasks/") && req.method === "GET") {
-    const id = url.pathname.split("/")[3];
-    serveApiTaskById(res, id, url);
+    sendGone(res, "/api/tasks/:id", "/api/tasks?task_id=<id>&include_subtasks=true");
   } else if (url.pathname === "/api/subtasks" && req.method === "GET") {
-    serveApiSubtasks(res, url);
+    sendGone(res, "/api/subtasks", "/api/tasks?task_id=<id>&include_subtasks=true");
   } else if (url.pathname === "/api/subtasks/queue" && req.method === "GET") {
-    serveApiSubtasksQueue(res);
+    sendGone(res, "/api/subtasks/queue", "/api/tasks?include_subtasks=true");
   } else if (url.pathname === "/api/subtasks/assignments" && req.method === "GET") {
-    serveApiSubtasksAssignments(res);
+    sendGone(res, "/api/subtasks/assignments", "/api/tasks?include_subtasks=true");
   } else if (url.pathname === "/api/dashboard/snapshot" && req.method === "GET") {
-    serveApiDashboardSnapshot(res, url);
+    sendGone(res, "/api/dashboard/snapshot", "use /api/agents + /api/projects/summary + /api/tasks");
   } else if (url.pathname === "/api/events/projects" && req.method === "GET") {
     serveApiProjectsEvents(res, url);
   } else if (url.pathname === "/api/purge-offline" && req.method === "POST") {

@@ -29,7 +29,8 @@ const EXPECTED_TABLES: Record<string, string[]> = {
   ],
   subtasks: [
     "id", "task_id", "title", "description", "status",
-    "priority", "validation_criteria", "worker_agent_id", "qa_agent_id",
+    "priority", "validation_criteria", "required_role", "acceptance_criteria_json",
+    "attempt_count", "max_attempts", "last_error", "worker_agent_id", "qa_agent_id",
     "assigned_human", "result_summary", "sequence_order",
     "created_at", "updated_at", "completed_at",
   ],

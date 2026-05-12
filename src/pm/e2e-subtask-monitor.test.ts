@@ -366,6 +366,105 @@ describe("e2e-subtask-monitor", () => {
   // ───────────────────────────────────────────────────────────
   // 3. Dependencies + rollback: A fails, B stays blocked
   // ───────────────────────────────────────────────────────────
+  test("processes completion reports before launching newly-unblocked subtasks", async () => {
+    const saved = saveEnv();
+    const fabricDir = `/tmp/fabric-agents/e2e-test-4-${Date.now()}`;
+    const dbPath = join(fabricDir, "projects.sqlite");
+    const registryPath = join(fabricDir, "registry.sqlite");
+
+    process.env.FABRIC_DIR = fabricDir;
+    process.env.PROJECTS_DB_PATH = dbPath;
+    process.env.SUBTASK_MONITOR_LOG_PATH = join(fabricDir, "monitor.log");
+    process.env.SUBTASK_MONITOR_INTERVAL_MS = "100000";
+
+    mkdirSync(fabricDir, { recursive: true });
+    mkdirSync(join(fabricDir, "mailboxes"), { recursive: true });
+
+    const db = initDb(dbPath);
+    setupRegistryDb(registryPath);
+
+    const project = db
+      .prepare(`INSERT INTO projects (name, status) VALUES (?, ?)`)
+      .run("Completion Project", "active");
+    const projectId = Number(project.lastInsertRowid);
+    const task = db
+      .prepare(`INSERT INTO tasks (project_id, title, status) VALUES (?, ?, ?)`)
+      .run(projectId, "Completion Task", "in_progress");
+    const taskId = Number(task.lastInsertRowid);
+
+    const aRow = db
+      .prepare(`INSERT INTO subtasks (task_id, title, status, attempt_count, max_attempts, worker_agent_id) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(taskId, "Subtask A", "running", 1, 2, "agent-subtask-a");
+    const aId = Number(aRow.lastInsertRowid);
+    const bRow = db
+      .prepare(`INSERT INTO subtasks (task_id, title, status) VALUES (?, ?, ?)`)
+      .run(taskId, "Subtask B", "backlog");
+    const bId = Number(bRow.lastInsertRowid);
+
+    db.prepare(`INSERT INTO subtask_assignments (subtask_id, agent_id, status) VALUES (?, ?, ?)`)
+      .run(aId, "agent-subtask-a", "active");
+    db.prepare(
+      `INSERT INTO subtask_dependencies (subtask_id, depends_on_subtask_id, dependency_type) VALUES (?, ?, ?)`
+    ).run(bId, aId, "blocking");
+    db.close();
+
+    const mailboxPath = join(fabricDir, "mailboxes", "boss-test.jsonl");
+    writeFileSync(
+      mailboxPath,
+      JSON.stringify({
+        type: "response",
+        payload: {
+          task_id: `subtask-${aId}`,
+          reporter_agent_id: "agent-subtask-a",
+          status: "done",
+          summary: "finished",
+          verification_results: [],
+        },
+      }) + "\n"
+    );
+
+    const launched: Array<number> = [];
+    const mockLaunchWorker = async (subtask: any, _coordinatorId: string) => {
+      launched.push(subtask.id);
+      const agentId = `agent-subtask-${subtask.id}`;
+      const rdb = new DatabaseSync(registryPath);
+      rdb
+        .prepare(`INSERT OR REPLACE INTO agents (agent_id, role, fabric_status) VALUES (?, ?, ?)`)
+        .run(agentId, "dev", "idle");
+      rdb.close();
+      return agentId;
+    };
+
+    const deps = {
+      findReadySubtasks: (db: DatabaseSync) => findReadySubtasks(db),
+      countActiveAssignmentsByRole: (db: DatabaseSync) => countActiveAssignmentsByRole(db),
+      launchWorker: mockLaunchWorker,
+      assignSubtask,
+      handleLaunchError,
+    };
+
+    runMonitorLoop("boss-test", deps);
+    await new Promise((r) => setTimeout(r, 150));
+    stopMonitorLoop();
+
+    const dbCheck = new DatabaseSync(dbPath);
+    const aStatus = dbCheck.prepare(`SELECT status, result_summary FROM subtasks WHERE id = ?`).get(aId) as { status: string; result_summary: string | null };
+    const bStatus = dbCheck.prepare(`SELECT status, worker_agent_id FROM subtasks WHERE id = ?`).get(bId) as { status: string; worker_agent_id: string | null };
+    dbCheck.close();
+
+    assert.strictEqual(aStatus.status, "done");
+    assert.strictEqual(aStatus.result_summary, "finished");
+    assert.strictEqual(bStatus.status, "running");
+    assert.strictEqual(bStatus.worker_agent_id, `agent-subtask-${bId}`);
+    assert.deepStrictEqual(launched, [bId]);
+
+    cleanupFabricDir(fabricDir);
+    restoreEnv(saved);
+  });
+
+  // ───────────────────────────────────────────────────────────
+  // 4. Dependencies + rollback: A fails launch, B stays backlog
+  // ───────────────────────────────────────────────────────────
   test("dependencias + rollback: A fails launch, B stays backlog", async () => {
     const saved = saveEnv();
     const fabricDir = `/tmp/fabric-agents/e2e-test-3-${Date.now()}`;
