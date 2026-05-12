@@ -1719,6 +1719,7 @@
             <button class="btn" data-action="ping-agent" data-agent-id="${escapeHtml(a.agent_id)}">Ping</button>
             <button class="btn" data-action="view-log" data-agent-id="${escapeHtml(a.agent_id)}">View Log</button>
             ${!isCoordinator ? `<button class="btn danger" data-action="kill-agent" data-agent-id="${escapeHtml(a.agent_id)}">Kill</button>` : ''}
+            <button class="btn danger" data-action="cleanup-agent" data-agent-id="${escapeHtml(a.agent_id)}">Cleanup</button>
           </div>
         </article>`;
     }
@@ -2565,6 +2566,7 @@
           <button class="btn" data-action="ping-selected-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Ping</button>
           <button class="btn" data-action="open-selected-agent-log" data-agent-id="${escapeHtml(agent.agent_id)}">Open log/mailbox</button>
           <button class="btn" data-action="refresh-acp">Refresh</button>
+          <button class="btn danger" data-action="cleanup-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Cleanup agent</button>
         </div>
       `;
       renderAcpWorkspace('operations');
@@ -3615,6 +3617,20 @@
         } catch (err) {
           addEventLog('kill-error', `Kill falló para ${id}: ${err.message}`, { agent_id: id }, 'agent');
         }
+      }
+
+      if (action === 'cleanup-agent') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (!id) return;
+        if (!confirm(`Cleanup agent ${id}? This will kill its pane/process if present, remove mailbox/state/output artifacts, and delete it from the runtime registry immediately.`)) return;
+        try {
+          const data = await fetchJson(`${API}/api/cleanup-agent/${encodeURIComponent(id)}`, { method: 'POST' });
+          removeAgent(id);
+          addEventLog('cleanup-agent', `Cleanup completed for ${id}`, data, 'agent');
+        } catch (err) {
+          addEventLog('cleanup-agent-error', `Cleanup failed for ${id}: ${err.message}`, { agent_id: id }, 'agent');
+        }
+        return;
       }
 
       if (action === 'toggle-agent-group') {
