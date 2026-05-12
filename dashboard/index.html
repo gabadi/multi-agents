@@ -679,6 +679,84 @@
       border-color: var(--cyan);
       box-shadow: 0 0 0 1px rgba(6,182,212,.25) inset;
     }
+    .ops-tree-project {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15,17,23,.38);
+      overflow: hidden;
+    }
+    .ops-tree-project-head {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .ops-tree-project-head.active { background: rgba(6,182,212,.16); }
+    .ops-tree-project-head .muted { font-size: 11px; }
+    .ops-tree-body {
+      border-top: 1px solid var(--border);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ops-tree-task {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(31,35,48,.65);
+      padding: 6px 8px;
+    }
+    .ops-tree-task.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(6,182,212,.24) inset;
+    }
+    .ops-tree-task-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .ops-tree-task-title { font-size: 12px; font-weight: 600; }
+    .ops-tree-task-owners { margin-top: 4px; font-size: 11px; color: var(--muted); }
+    .ops-tree-subtasks {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ops-tree-subtask {
+      border-radius: 6px;
+      border: 1px dashed var(--border);
+      padding: 4px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      background: rgba(17,20,29,.65);
+    }
+    .ops-tree-subtask.active {
+      border-style: solid;
+      border-color: var(--cyan);
+      background: rgba(6,182,212,.12);
+    }
+    .ops-detail-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .ops-detail-subtasks {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
     .ops-main-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1058,6 +1136,8 @@
       acpMessagesSignature: '',
       subtasksQueue: { ready: [], running: [], blocked: [], counts: { ready: 0, running: 0, blocked: 0 } },
       operationsLane: 'coordinators',
+      operationsSelection: { type: 'project', projectId: null, taskId: null, subtaskId: null },
+      operationsExpandedProjects: {},
       operationsLogCollapsed: false,
     };
 
@@ -1739,46 +1819,192 @@
       return { coordinators, running, idle, offline };
     }
 
+    function getTaskOwnership(task = {}) {
+      const coordinator = task.coordinator_agent_id || task.coordinator_id || task.coordinator_agent || task.owner_agent_id || '--';
+      const orchestrator = task.orchestrator_agent_id || task.sub_coordinator_agent_id || task.subcoordinator_agent_id || task.sub_coordinator_id || task.orchestrator_id || '--';
+      return { coordinator, orchestrator };
+    }
+
+    function getSubtaskAssignees(subtask = {}, task = {}) {
+      const fromSubtask = Array.isArray(subtask.assigned_agents)
+        ? subtask.assigned_agents
+        : Array.isArray(subtask.agent_ids)
+          ? subtask.agent_ids
+          : [subtask.worker_agent_id, subtask.assigned_agent_id, subtask.agent_id].filter(Boolean);
+      if (fromSubtask.length) return fromSubtask;
+      if (Array.isArray(task.agent_ids) && task.agent_ids.length) return task.agent_ids;
+      return [];
+    }
+
+    function getTaskSubtasksNormalized(task = {}) {
+      const inline = Array.isArray(task.subtasks) ? task.subtasks : [];
+      if (inline.length) return inline.map(st => normalizeSubtaskEntity(st, task.id)).filter(Boolean);
+      return materializeTaskSubtasks(task.id);
+    }
+
+    function ensureOperationsSelection(projects = []) {
+      const sel = state.operationsSelection || {};
+      const validProject = sel.projectId != null && state.projects.has(Number(sel.projectId));
+      if (sel.type === 'project' && validProject) return;
+      if (sel.type === 'task' && sel.taskId != null && state.tasks.has(Number(sel.taskId))) return;
+      if (sel.type === 'subtask' && sel.subtaskId != null && state.subtasks.has(Number(sel.subtaskId))) return;
+
+      const firstProject = projects[0];
+      if (firstProject) {
+        state.operationsSelection = { type: 'project', projectId: firstProject.id, taskId: null, subtaskId: null };
+        if (state.operationsExpandedProjects[firstProject.id] == null) state.operationsExpandedProjects[firstProject.id] = true;
+      } else {
+        state.operationsSelection = { type: 'project', projectId: null, taskId: null, subtaskId: null };
+      }
+    }
+
+    function renderOperationsTree(projects = []) {
+      const selected = state.operationsSelection || {};
+      refs.opsNavList.innerHTML = projects.map((project) => {
+        const taskIds = state.projectTasks.get(Number(project.id)) || [];
+        const tasks = taskIds
+          .map((taskId) => state.tasks.get(Number(taskId)))
+          .filter(Boolean)
+          .filter(shouldShowTask)
+          .sort((a,b) => (a.sequence_order ?? 99999) - (b.sequence_order ?? 99999));
+        const expanded = state.operationsExpandedProjects[project.id] !== false;
+        const projectSelected = selected.type === 'project' && Number(selected.projectId) === Number(project.id);
+
+        return `<article class="ops-tree-project">
+          <button class="ops-tree-project-head ${projectSelected ? 'active' : ''}" data-action="select-ops-project" data-project-id="${escapeHtml(project.id)}">
+            <span><strong>${escapeHtml(project.code || `p${project.id}`)}</strong> <span class="muted">${escapeHtml(project.name || '')}</span></span>
+            <span class="muted">${tasks.length} tasks ${expanded ? '▾' : '▸'}</span>
+          </button>
+          ${expanded ? `<div class="ops-tree-body">${tasks.length ? tasks.map((task) => {
+            const ownership = getTaskOwnership(task);
+            const taskSelected = selected.type === 'task' && Number(selected.taskId) === Number(task.id);
+            const subtasks = getTaskSubtasksNormalized(task);
+            return `<div class="ops-tree-task ${taskSelected ? 'active' : ''}">
+              <div class="ops-tree-task-head" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                <span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>
+                ${taskStatusBadge(task.status)}
+              </div>
+              <div class="ops-tree-task-owners">coord: ${escapeHtml(ownership.coordinator)} · orch/subcoord: ${escapeHtml(ownership.orchestrator)}</div>
+              <div class="ops-tree-subtasks">
+                ${subtasks.length ? subtasks.map((subtask) => {
+                  const subtaskSelected = selected.type === 'subtask' && Number(selected.subtaskId) === Number(subtask.id);
+                  const assigned = getSubtaskAssignees(subtask, task);
+                  return `<div class="ops-tree-subtask ${subtaskSelected ? 'active' : ''}" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                    <span>#${escapeHtml(subtask.id)} ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</span>
+                    <span class="muted">${escapeHtml(subtask.status || 'pending')} · ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</span>
+                  </div>`;
+                }).join('') : '<div class="muted">No subtasks</div>'}
+              </div>
+            </div>`;
+          }).join('') : '<div class="muted">No tasks in project.</div>'}</div>` : ''}
+        </article>`;
+      }).join('') || `<article class="ops-lane-card"><div class="muted">No projects available.</div></article>`;
+    }
+
+    function renderOperationsDetail() {
+      const sel = state.operationsSelection || {};
+      if (sel.type === 'task' && sel.taskId != null) {
+        const task = state.tasks.get(Number(sel.taskId));
+        if (!task) {
+          refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Task not found.</div></article>`;
+          return;
+        }
+        const project = state.projects.get(Number(task.project_id));
+        const ownership = getTaskOwnership(task);
+        const subtasks = getTaskSubtasksNormalized(task);
+        refs.opsLaneTitle.textContent = `🧩 Task #${task.id} detail`;
+        refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+          <article class="ops-lane-card">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><strong>${escapeHtml(task.title || `Task #${task.id}`)}</strong>${taskStatusBadge(task.status)}</div>
+            <div class="muted" style="margin-top:4px;">${escapeHtml(project?.code || `Project ${task.project_id || '--'}`)} · #${escapeHtml(task.id)}</div>
+            <div class="meta-grid" style="margin-top:8px;">
+              <div><b>Coordinator:</b> ${escapeHtml(ownership.coordinator)}</div>
+              <div><b>Orchestrator/Sub-coordinator:</b> ${escapeHtml(ownership.orchestrator)}</div>
+              <div><b>Branch:</b> ${escapeHtml(task.branch || '--')}</div>
+              <div><b>Worktree:</b> ${escapeHtml(task.worktree_path || '--')}</div>
+            </div>
+          </article>
+          <article class="ops-lane-card">
+            <div style="display:flex;justify-content:space-between;gap:8px;"><strong>Subtasks</strong><span class="muted">${subtasks.length}</span></div>
+            <div class="ops-detail-subtasks" style="margin-top:8px;">
+              ${subtasks.length ? subtasks.map((subtask) => {
+                const assigned = getSubtaskAssignees(subtask, task);
+                return `<div class="ops-tree-subtask" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}"><strong>#${escapeHtml(subtask.id)}</strong> ${escapeHtml(subtask.title || subtask.text || 'Subtask')}<div class="muted">state: ${escapeHtml(subtask.status || 'pending')} · assigned: ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</div></div>`;
+              }).join('') : '<div class="muted">No subtasks.</div>'}
+            </div>
+          </article>
+        </div>`;
+        return;
+      }
+
+      if (sel.type === 'subtask' && sel.subtaskId != null) {
+        const subtask = state.subtasks.get(Number(sel.subtaskId));
+        if (!subtask) {
+          refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Subtask not found.</div></article>`;
+          return;
+        }
+        const task = state.tasks.get(Number(subtask.task_id));
+        const project = task ? state.projects.get(Number(task.project_id)) : null;
+        const assigned = getSubtaskAssignees(subtask, task || {});
+        refs.opsLaneTitle.textContent = `🧷 Subtask #${subtask.id} detail`;
+        refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+          <article class="ops-lane-card">
+            <strong>${escapeHtml(subtask.title || subtask.text || `Subtask #${subtask.id}`)}</strong>
+            <div class="meta-grid" style="margin-top:8px;">
+              <div><b>State:</b> ${escapeHtml(subtask.status || 'pending')}</div>
+              <div><b>Assigned agents:</b> ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</div>
+              <div><b>Task:</b> ${task ? `<a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}">#${escapeHtml(task.id)} ${escapeHtml(task.title || '')}</a>` : '--'}</div>
+              <div><b>Project:</b> ${project ? `<a href="#" data-action="select-ops-project" data-project-id="${escapeHtml(project.id)}">${escapeHtml(project.code || `p${project.id}`)}</a>` : '--'}</div>
+            </div>
+          </article>
+        </div>`;
+        return;
+      }
+
+      const project = state.projects.get(Number(sel.projectId));
+      if (!project) {
+        refs.opsLaneTitle.textContent = '🛰️ Operations detail';
+        refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Select a project or task from the left tree.</div></article>`;
+        return;
+      }
+      const taskIds = state.projectTasks.get(Number(project.id)) || [];
+      const tasks = taskIds.map((id) => state.tasks.get(Number(id))).filter(Boolean).filter(shouldShowTask);
+      refs.opsLaneTitle.textContent = `📁 ${project.code || `p${project.id}`} detail`;
+      refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+        <article class="ops-lane-card">
+          <strong>${escapeHtml(project.name || `Project ${project.id}`)}</strong>
+          <div class="muted" style="margin-top:4px;">project #${escapeHtml(project.id)} · status ${escapeHtml(project.status || 'planned')}</div>
+          <div class="chip-row" style="margin-top:8px;"><span class="chip">Tasks: ${tasks.length}</span><span class="chip">Repo: ${escapeHtml(project.repo_local_path || project.repo_url || '--')}</span></div>
+        </article>
+        <article class="ops-lane-card">
+          <strong>Tasks</strong>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            ${tasks.length ? tasks.map((task) => {
+              const ownership = getTaskOwnership(task);
+              const subtasks = getTaskSubtasksNormalized(task);
+              return `<div class="ops-tree-task" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                <div class="ops-tree-task-head"><span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>${taskStatusBadge(task.status)}</div>
+                <div class="ops-tree-task-owners">coord: ${escapeHtml(ownership.coordinator)} · orch/subcoord: ${escapeHtml(ownership.orchestrator)}</div>
+                <div class="muted">subtasks: ${subtasks.length}</div>
+              </div>`;
+            }).join('') : '<div class="muted">No tasks in current project.</div>'}
+          </div>
+        </article>
+      </div>`;
+    }
+
     function renderOperations() {
       if (!refs.opsNavList || !refs.opsMainGrid) return;
-      const lanes = operationsLaneBuckets();
-      const laneDefs = [
-        { key: 'coordinators', label: 'Coordinators', icon: '👑' },
-        { key: 'running', label: 'Running Workers', icon: '⚡' },
-        { key: 'idle', label: 'Idle Workers', icon: '💤' },
-        { key: 'offline', label: 'Offline / History', icon: '🪫' },
-      ];
-
-      if (!lanes[state.operationsLane]) state.operationsLane = 'coordinators';
+      let projects = [...state.projects.values()].sort((a,b) => (a.id - b.id));
+      projects = projects.filter(shouldShowProject);
+      ensureOperationsSelection(projects);
 
       refs.opsAgentTotal.textContent = `${[...state.agents.values()].length} agents`;
-      refs.opsTasksCount.textContent = `Tasks: ${[...state.tasks.values()].length}`;
-      refs.opsProjectsCount.textContent = `Projects: ${[...state.projects.values()].length}`;
+      refs.opsTasksCount.textContent = `Tasks: ${[...state.tasks.values()].filter(shouldShowTask).length}`;
+      refs.opsProjectsCount.textContent = `Projects: ${projects.length}`;
 
-      refs.opsNavList.innerHTML = laneDefs.map(({ key, label, icon }) => {
-        const count = lanes[key]?.length || 0;
-        return `<button class="ops-nav-item ${state.operationsLane === key ? 'active' : ''}" data-action="select-ops-lane" data-lane="${key}"><span>${icon} ${escapeHtml(label)}</span><span class="muted">${count}</span></button>`;
-      }).join('');
-
-      const selected = laneDefs.find(l => l.key === state.operationsLane);
-      const visible = lanes[state.operationsLane] || [];
-      refs.opsLaneTitle.textContent = `${selected?.icon || '🛰️'} ${selected?.label || 'Lane'}`;
-
-      if (!visible.length) {
-        refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">No agents in this lane.</div></article>`;
-      } else {
-        refs.opsMainGrid.innerHTML = visible.slice(0, 12).map((agent) => {
-          const current = agent.pm_task_title || agent.current_task || 'No task context';
-          return `<article class="ops-lane-card">
-            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-              <strong>${escapeHtml(agent.agent_id)}</strong>
-              ${agentBadge(agentStatus(agent))}
-            </div>
-            <div class="muted" style="margin-top:4px;">${escapeHtml(agent.role || 'agent')} · ${escapeHtml(agent.model || '--')}</div>
-            <div class="muted" style="margin-top:6px;">${escapeHtml(String(current).slice(0, 120))}</div>
-          </article>`;
-        }).join('');
-      }
+      renderOperationsTree(projects);
+      renderOperationsDetail();
 
       const acpAgent = state.acpSelectedAgentId ? state.agents.get(state.acpSelectedAgentId) : null;
       refs.opsRailAgent.textContent = acpAgent ? acpAgent.agent_id : 'No agent selected';
@@ -2605,6 +2831,47 @@
       if (action === 'select-ops-lane') {
         state.operationsLane = el.dataset.lane || 'coordinators';
         renderOperations();
+        return;
+      }
+
+      if (action === 'select-ops-project') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        if (Number.isFinite(projectId)) {
+          state.operationsExpandedProjects[projectId] = state.operationsExpandedProjects[projectId] === false;
+          state.operationsSelection = { type: 'project', projectId, taskId: null, subtaskId: null };
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'select-ops-task') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        const taskId = Number(el.dataset.taskId);
+        if (Number.isFinite(taskId)) {
+          if (Number.isFinite(projectId)) state.operationsExpandedProjects[projectId] = true;
+          state.operationsSelection = { type: 'task', projectId: Number.isFinite(projectId) ? projectId : null, taskId, subtaskId: null };
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'select-ops-subtask') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        const taskId = Number(el.dataset.taskId);
+        const subtaskId = Number(el.dataset.subtaskId);
+        if (Number.isFinite(subtaskId)) {
+          if (Number.isFinite(projectId)) state.operationsExpandedProjects[projectId] = true;
+          state.operationsSelection = {
+            type: 'subtask',
+            projectId: Number.isFinite(projectId) ? projectId : null,
+            taskId: Number.isFinite(taskId) ? taskId : null,
+            subtaskId,
+          };
+          renderOperations();
+        }
         return;
       }
 
