@@ -336,6 +336,12 @@
       gap: 2px;
       flex: 0 0 auto;
     }
+    .acp-dock {
+      min-height: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
     .agent-detail-panel {
       min-height: 0;
       flex: 1;
@@ -883,15 +889,18 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: calc(100vh - 300px);
-      overflow: auto;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
     }
-    .ops-agent-rail { display: flex; flex-direction: column; gap: 8px; }
     .ops-agent-header { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 10px; }
     .ops-agent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .ops-agent-messages { border: 1px solid var(--border); border-radius: 10px; background: rgba(15,17,23,.58); padding: 8px; max-height: 38vh; overflow: auto; display:flex; flex-direction:column; gap:8px; }
-    .ops-agent-composer { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 8px; display:flex; flex-direction:column; gap:8px; }
-    .ops-agent-input { min-height: 88px; resize: vertical; }
+    .ops-acp-dock {
+      min-height: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
     .ops-link { color: var(--cyan); text-decoration: none; }
     .ops-link:hover { text-decoration: underline; }
 
@@ -1045,7 +1054,10 @@
               <span class="muted" id="opsRailAgent">No agent selected</span>
             </div>
             <div id="opsRailBody" class="ops-rail-body">
-              <p class="muted">Reserved rail for selected agent details, quick controls, and live chat context.</p>
+              <div id="opsRailSummary" class="ops-agent-header">
+                <p class="muted">Reserved rail for selected agent details, quick controls, and live chat context.</p>
+              </div>
+              <div id="opsAcpDock" class="ops-acp-dock"></div>
             </div>
           </aside>
         </div>
@@ -1081,17 +1093,19 @@
 
           <aside class="agent-detail-shell">
             <div id="acpHeader" hidden aria-hidden="true"></div>
-            <section class="acp-panel agent-detail-panel">
-              <div id="acpMessages" class="acp-messages"></div>
-              <div class="acp-composer">
-                <textarea id="acpInput" class="acp-input" placeholder="Escribe un mensaje para el agente seleccionado…"></textarea>
-                <div class="actions" style="margin:0;">
-                  <button class="btn" data-action="send-acp-message">Enviar 📤</button>
-                  <button class="btn" data-action="open-acp-task-modal">📋 Tarea</button>
-                  <button class="btn" data-action="refresh-acp">Refresh</button>
+            <div id="acpDockAgents" class="acp-dock">
+              <section id="acpPanel" class="acp-panel agent-detail-panel">
+                <div id="acpMessages" class="acp-messages"></div>
+                <div class="acp-composer">
+                  <textarea id="acpInput" class="acp-input" placeholder="Escribe un mensaje para el agente seleccionado…"></textarea>
+                  <div class="actions" style="margin:0;">
+                    <button class="btn" data-action="send-acp-message">Enviar 📤</button>
+                    <button class="btn" data-action="open-acp-task-modal">📋 Tarea</button>
+                    <button class="btn" data-action="refresh-acp">Refresh</button>
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </div>
           </aside>
         </div>
       </section>
@@ -1238,9 +1252,6 @@
         agentIdleMs: 8 * 60 * 1000,
       },
       blockers: [],
-      operationsRailDraftByAgent: (persistedUiState.operationsRailDraftByAgent && typeof persistedUiState.operationsRailDraftByAgent === 'object')
-        ? persistedUiState.operationsRailDraftByAgent
-        : {},
     };
 
     function persistUiState(patch = {}) {
@@ -1273,6 +1284,8 @@
       agentStatsBar: document.getElementById('agentStatsBar'),
       agentSearch: document.getElementById('agentSearch'),
       acpHeader: document.getElementById('acpHeader'),
+      acpPanel: document.getElementById('acpPanel'),
+      acpDockAgents: document.getElementById('acpDockAgents'),
       acpMessages: document.getElementById('acpMessages'),
       acpInput: document.getElementById('acpInput'),
       subtaskStatsBar: document.getElementById('subtaskStatsBar'),
@@ -1287,6 +1300,8 @@
       opsLaneTitle: document.getElementById('opsLaneTitle'),
       opsRailAgent: document.getElementById('opsRailAgent'),
       opsRailBody: document.getElementById('opsRailBody'),
+      opsRailSummary: document.getElementById('opsRailSummary'),
+      opsAcpDock: document.getElementById('opsAcpDock'),
       opsEventLogList: document.getElementById('opsEventLogList'),
       opsEventLogPanel: document.getElementById('opsEventLogPanel'),
     };
@@ -2499,79 +2514,38 @@
     }
 
 
-    function getOperationsRailDraft(agentId) {
-      if (!agentId) return '';
-      return String(state.operationsRailDraftByAgent?.[agentId] || '');
-    }
-
-    function setOperationsRailDraft(agentId, text, { persist = true } = {}) {
-      if (!agentId) return;
-      const next = String(text || '');
-      if (!state.operationsRailDraftByAgent || typeof state.operationsRailDraftByAgent !== 'object') {
-        state.operationsRailDraftByAgent = {};
-      }
-      if (next) state.operationsRailDraftByAgent[agentId] = next;
-      else delete state.operationsRailDraftByAgent[agentId];
-      if (persist) persistUiState({ operationsRailDraftByAgent: state.operationsRailDraftByAgent });
-    }
-
-    function captureOperationsRailDraftFromDom() {
-      const input = document.getElementById('opsRailInput');
-      if (!input) return;
-      const agentId = state.acpSelectedAgentId || ensureAcpSelection();
-      if (!agentId) return;
-      setOperationsRailDraft(agentId, input.value, { persist: false });
+    function mountAcpPanel(view = 'agents') {
+      const panel = refs.acpPanel;
+      const dock = view === 'operations' ? refs.opsAcpDock : refs.acpDockAgents;
+      if (!panel || !dock || panel.parentElement === dock) return;
+      dock.appendChild(panel);
     }
 
     function renderOperationsRail() {
-      if (!refs.opsRailBody || !refs.opsRailAgent) return;
-      captureOperationsRailDraftFromDom();
+      if (!refs.opsRailBody || !refs.opsRailAgent || !refs.opsRailSummary || !refs.opsAcpDock) return;
+      mountAcpPanel('operations');
       const agentId = ensureAcpSelection();
       const agent = agentId ? state.agents.get(agentId) : null;
       refs.opsRailAgent.textContent = agent ? agent.agent_id : 'No agent selected';
 
       if (!agent) {
-        refs.opsRailBody.innerHTML = `<p class="muted">Select an agent to view recent outputs, send a message, or open mailbox log.</p>`;
+        refs.opsRailSummary.innerHTML = `<p class="muted">Select an agent to view recent outputs, send a message, or open mailbox log.</p>`;
+        renderAcpWorkspace('operations');
         return;
       }
 
-      const outputs = getAcpOutputs(agent.agent_id).slice(-20).map((m) => ({ ...m, source: 'agent' }));
-      const human = (state.acpHumanMessages.get(agent.agent_id) || []).slice(-20).map((m) => ({ ...m, source: 'human' }));
-      const messages = human.concat(outputs).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(-30);
-      const offline = !agent.process_alive || ['offline','shutting_down'].includes(agentStatus(agent));
       const contextHtml = renderAgentContext(agent) || `<span>${escapeHtml(agent.pm_task_title || (typeof agent.current_task === 'object' ? agent.current_task?.title : agent.current_task) || 'No active task context')}</span>`;
-
-      refs.opsRailBody.innerHTML = `
-        <div class="ops-agent-rail">
-          <div class="ops-agent-header">
-            <strong>${escapeHtml(agent.agent_id)}</strong>
-            <div class="muted">${escapeHtml(agent.role || '--')} · ${escapeHtml(agentStatus(agent))}</div>
-            <div class="muted">${contextHtml}</div>
-            <div class="ops-agent-actions">
-              <button class="btn" data-action="ping-selected-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Ping</button>
-              <button class="btn" data-action="open-selected-agent-log" data-agent-id="${escapeHtml(agent.agent_id)}">Open log/mailbox</button>
-              <button class="btn" data-action="refresh-acp">Refresh</button>
-            </div>
-          </div>
-          <div class="ops-agent-messages" id="opsRailMessages">
-            ${messages.length ? messages.map((m) => {
-              const cls = m.source === 'human' ? 'human' : `agent ${m.isError ? 'error' : ''}`;
-              return `<div class="acp-message ${cls}"><div class="acp-meta"><b>${m.source === 'human' ? 'You' : escapeHtml(agent.agent_id)}</b><span class="acp-type-tag">${escapeHtml(m.type || (m.source === 'human' ? 'chat' : 'output'))}</span><span>${fmtDate(m.timestamp)}</span>${m.status ? `<span>${escapeHtml(m.status)}</span>` : ''}</div><div class="acp-bubble ${m.source === 'human' ? '' : 'markdown'}">${m.source === 'human' ? escapeHtml(m.content) : renderMarkdown(m.content)}</div></div>`;
-            }).join('') : `<div class="acp-empty">No outputs yet for ${escapeHtml(agent.agent_id)}.</div>`}
-          </div>
-          <div class="ops-agent-composer">
-            <textarea id="opsRailInput" class="acp-input ops-agent-input" placeholder="Send message to ${escapeHtml(agent.agent_id)}" ${offline || state.acpSending ? 'disabled' : ''}></textarea>
-            <div class="actions" style="margin:0;">
-              <button class="btn" data-action="send-ops-message" data-agent-id="${escapeHtml(agent.agent_id)}" ${offline || state.acpSending ? 'disabled' : ''}>Send message</button>
-            </div>
-          </div>
+      refs.opsRailSummary.innerHTML = `
+        <strong>${escapeHtml(agent.agent_id)}</strong>
+        <div class="muted">${escapeHtml(agent.role || '--')} · ${escapeHtml(agentStatus(agent))}</div>
+        <div class="muted">${contextHtml}</div>
+        <div class="ops-agent-actions">
+          <button class="btn" data-action="ping-selected-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Ping</button>
+          <button class="btn" data-action="open-selected-agent-log" data-agent-id="${escapeHtml(agent.agent_id)}">Open log/mailbox</button>
+          <button class="btn" data-action="refresh-acp">Refresh</button>
         </div>
       `;
-
-      const input = document.getElementById('opsRailInput');
-      if (input) input.value = getOperationsRailDraft(agent.agent_id);
-      const msgBox = document.getElementById('opsRailMessages');
-      if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
+      renderAcpWorkspace('operations');
     }
 
     function renderOperations() {
@@ -2860,7 +2834,8 @@
       state.acpMessagesSignature = messagesSig;
     }
 
-    function renderAcpWorkspace() {
+    function renderAcpWorkspace(view = (state.activeTab === 'operations' ? 'operations' : 'agents')) {
+      mountAcpPanel(view);
       if (!refs.acpHeader || !refs.acpMessages || !refs.acpInput) return;
       renderAcpPanel();
     }
@@ -3588,26 +3563,6 @@
         return;
       }
 
-      if (action === 'send-ops-message') {
-        const agentId = el.dataset.agentId || state.acpSelectedAgentId || ensureAcpSelection();
-        const input = document.getElementById('opsRailInput');
-        const text = String(input?.value || '').trim();
-        if (!text) return;
-        state.acpSelectedAgentId = agentId;
-        localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
-        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
-        setOperationsRailDraft(agentId, text, { persist: false });
-        const sent = await sendAcpMessage('chat', { text });
-        if (sent) {
-          setOperationsRailDraft(agentId, '');
-          if (input) input.value = '';
-        } else {
-          setOperationsRailDraft(agentId, text);
-        }
-        renderOperationsRail();
-        return;
-      }
-
       if (action === 'open-acp-task-modal') {
         openAcpTaskModal();
         return;
@@ -3703,13 +3658,6 @@
         }
       });
     }
-    document.addEventListener('input', (e) => {
-      const input = e.target?.id === 'opsRailInput' ? e.target : null;
-      if (!input) return;
-      const agentId = state.acpSelectedAgentId || ensureAcpSelection();
-      if (!agentId) return;
-      setOperationsRailDraft(agentId, input.value, { persist: false });
-    });
     [refs.tfAgents, refs.tfProjects, refs.tfErrors, refs.tfPRs].forEach(chk => chk.addEventListener('change', renderTimeline));
     refs.modal.addEventListener('click', (e) => {
       if (e.target === refs.modal) closeModal();
