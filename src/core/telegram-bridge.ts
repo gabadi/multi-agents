@@ -526,15 +526,14 @@ export function forwardToCoordinator(
   }
 }
 
-function routeQueueStatusText(target: ActiveCoordinatorSnapshot): string {
+function isCoordinatorBusy(target: ActiveCoordinatorSnapshot): boolean {
   const busyStatuses = new Set(["turn_active", "waiting_llm", "streaming", "thinking", "tool_running", "processing"]);
-  const busy = busyStatuses.has(String(target.fabric_status || ""));
+  return busyStatuses.has(String(target.fabric_status || ""));
+}
 
-  // router_queued semantic notification (monitor-level, not agent ACK).
-  const state = busy ? "busy" : "idle";
-  return busy
-    ? `router_queued: queued for ${target.agent_id} (${target.role}, ${state}). It will run next turn without interrupting current work.`
-    : `router_queued: queued for ${target.agent_id} (${target.role}, ${state}). It should start on next turn.`;
+function routeQueueStatusText(target: ActiveCoordinatorSnapshot): string {
+  const state = isCoordinatorBusy(target) ? "busy" : "idle";
+  return `router_queued: queued for ${target.agent_id} (${target.role}, ${state}). It will run next turn without interrupting current work.`;
 }
 
 function formatTelegramStatusReply(session: ChatSession, activeCoordinators: ActiveCoordinatorSnapshot[]): string {
@@ -612,6 +611,14 @@ export async function processTelegramMessage(
   }
 
   const session = getChatSession(chatId, userId);
+  const sessionTargetActive = session.activeCoordinatorId
+    ? activeCoordinators.some((c) => c.agent_id === session.activeCoordinatorId)
+    : false;
+  if (!sessionTargetActive) {
+    session.activeCoordinatorId = defaultCoordinator;
+    touchSession(session);
+  }
+
   const targetId = intent.monitor_action === "route" && intent.intended_coordinator_id
     ? intent.intended_coordinator_id
     : (session.activeCoordinatorId || intent.intended_coordinator_id || defaultCoordinator);
@@ -651,21 +658,25 @@ export async function processTelegramMessage(
   registerPendingRequest(requestId, chatId, messageId, routeCheck.coordinator.agent_id, text);
 
   // router_queued is monitor-owned and emitted only after successful enqueue.
-  const queuedSend = await tgSendMessage(token, chatId, routeQueueStatusText(routeCheck.coordinator), { replyTo: messageId });
-  auditTelegramDelivery({
-    request_id: requestId,
-    status: "sent",
-    via: "monitor",
-    chat_id: queuedSend.chatId ?? chatId,
-    reply_to: messageId,
-    telegram_message_id: queuedSend.messageId,
-    target_coordinator: routeCheck.coordinator.agent_id,
-    details: {
-      lifecycle_event: "router_queued",
-      status: "router_queued",
-      monitor_owner: true,
-    },
-  });
+  // To avoid noisy duplicate Telegram messages, emit it only when the target is
+  // currently busy. When idle, the agent ACK should arrive quickly and is enough.
+  if (isCoordinatorBusy(routeCheck.coordinator)) {
+    const queuedSend = await tgSendMessage(token, chatId, routeQueueStatusText(routeCheck.coordinator), { replyTo: messageId });
+    auditTelegramDelivery({
+      request_id: requestId,
+      status: "sent",
+      via: "monitor",
+      chat_id: queuedSend.chatId ?? chatId,
+      reply_to: messageId,
+      telegram_message_id: queuedSend.messageId,
+      target_coordinator: routeCheck.coordinator.agent_id,
+      details: {
+        lifecycle_event: "router_queued",
+        status: "router_queued",
+        monitor_owner: true,
+      },
+    });
+  }
 
   return { handled: true, action: "router_queued", target: routeCheck.coordinator.agent_id };
 }
