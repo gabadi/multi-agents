@@ -338,7 +338,7 @@ function loadChatSessions(): void {
         userId: typeof session.userId === "number" ? session.userId : undefined,
         activeCoordinatorId: typeof session.activeCoordinatorId === "string" && session.activeCoordinatorId.trim()
           ? session.activeCoordinatorId.trim()
-          : "boss",
+          : "secretary",
         mode: session.mode === "buffer" || session.mode === "approval" ? session.mode : "streaming",
         lastActivity: typeof session.lastActivity === "string" && session.lastActivity
           ? session.lastActivity
@@ -373,7 +373,7 @@ export function getChatSession(chatId: number, userId?: number): ChatSession {
     chatSessions.set(chatId, {
       chatId,
       userId,
-      activeCoordinatorId: "boss",
+      activeCoordinatorId: "secretary",
       mode: "streaming",
       lastActivity: new Date().toISOString(),
     });
@@ -399,14 +399,14 @@ export function resetTelegramBridgeStateForTests(): void {
 }
 
 export function getActiveCoordinators(agents: AgentInfo[]): ActiveCoordinatorSnapshot[] {
-  const allowedRoles = new Set(["coordinator", "sub-coordinator"]);
+  const allowedRoles = new Set(["secretary", "coordinator", "sub-coordinator"]);
   const blockedStatuses = new Set(["offline", "shutting_down"]);
 
   return agents
     .filter((a) => allowedRoles.has(a.role) && !blockedStatuses.has(String(a.fabric_status || "")))
     .map((a) => ({
       agent_id: a.agent_id,
-      role: a.role as "coordinator" | "sub-coordinator",
+      role: a.role as "secretary" | "coordinator" | "sub-coordinator",
       fabric_status: a.fabric_status,
       current_task: a.current_task ?? null,
     }));
@@ -418,7 +418,7 @@ function validateCoordinatorRoute(
 ): { ok: true; coordinator: ActiveCoordinatorSnapshot } | { ok: false; reason: string } {
   const coordinator = activeCoordinators.find((c) => c.agent_id === targetCoordinatorId);
   if (!coordinator) return { ok: false, reason: "target_not_active_coordinator" };
-  if (coordinator.role !== "coordinator" && coordinator.role !== "sub-coordinator") {
+  if (coordinator.role !== "secretary" && coordinator.role !== "coordinator" && coordinator.role !== "sub-coordinator") {
     return { ok: false, reason: "target_not_coordinator_role" };
   }
   return { ok: true, coordinator };
@@ -643,13 +643,7 @@ export async function processTelegramMessage(
   }
 
   const session = getChatSession(chatId, userId);
-  const sessionTargetActive = session.activeCoordinatorId
-    ? activeCoordinators.some((c) => c.agent_id === session.activeCoordinatorId)
-    : false;
-  if (!sessionTargetActive) {
-    session.activeCoordinatorId = defaultCoordinator;
-    touchSession(session);
-  }
+  healSessionCoordinator(session, activeCoordinators, defaultCoordinator);
 
   const targetId = intent.monitor_action === "route" && intent.intended_coordinator_id
     ? intent.intended_coordinator_id
@@ -749,6 +743,20 @@ async function handleSystemCommand(
   return false;
 }
 
+function healSessionCoordinator(
+  session: ChatSession,
+  activeCoordinators: ActiveCoordinatorSnapshot[],
+  fallbackCoordinator = "secretary"
+): void {
+  const sessionTargetActive = session.activeCoordinatorId
+    ? activeCoordinators.some((c) => c.agent_id === session.activeCoordinatorId)
+    : false;
+  if (!sessionTargetActive) {
+    session.activeCoordinatorId = fallbackCoordinator;
+    touchSession(session);
+  }
+}
+
 export async function handleTelegramCommand(
   token: string,
   chatId: number,
@@ -759,6 +767,7 @@ export async function handleTelegramCommand(
 ): Promise<"handled" | "status" | "agents" | "forward"> {
   const lower = text.toLowerCase().trim();
   const session = getChatSession(chatId, userId);
+  healSessionCoordinator(session, activeCoordinators);
 
   if (lower === "/status") return "status";
   if (lower === "/agents" || lower === "/coordinators") return "agents";
@@ -807,9 +816,9 @@ export async function handleTelegramCommand(
   }
 
   if (lower === "/boss") {
-    session.activeCoordinatorId = "boss";
+    session.activeCoordinatorId = "secretary";
     touchSession(session);
-    await tgSendMessage(token, chatId, "Routing switched to: boss", { replyTo: messageId });
+    await tgSendMessage(token, chatId, "Routing switched to: secretary", { replyTo: messageId });
     return "handled";
   }
 

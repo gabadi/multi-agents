@@ -22,7 +22,7 @@ function getNluModel(): string {
 
 export interface ActiveCoordinatorSnapshot {
   agent_id: string;
-  role: "coordinator" | "sub-coordinator";
+  role: "secretary" | "coordinator" | "sub-coordinator";
   fabric_status: string;
   current_task?: string | null;
 }
