@@ -3,56 +3,71 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fabric Monitor v2</title>
+  <title>Fabric Monitor Dashboard</title>
   <style>
     :root {
-      --bg: #0b1020;
-      --panel: #131a2c;
-      --card: #1a2338;
-      --text: #e5e7eb;
-      --muted: #94a3b8;
-      --border: #2a3550;
-      --blue: #3b82f6;
-      --green: #22c55e;
-      --red: #ef4444;
-      --amber: #f59e0b;
+      --bg: #0f1117; --panel: #161922; --card: #1e2130;
+      --text: #e2e8f0; --muted: #94a3b8; --border: #2a2f42;
+      --green: #22c55e; --blue: #3b82f6; --purple: #a855f7;
+      --yellow: #eab308; --orange: #f97316; --red: #ef4444;
+      --cyan: #06b6d4; --gray: #64748b; --dark: #334155;
     }
 
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
 
     .app {
-      min-height: 100vh;
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto 1fr auto;
+      min-height: 100vh;
     }
 
     .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: var(--panel);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      flex-wrap: wrap;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      position: sticky; top: 0; z-index: 20;
     }
 
-    .title {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: .2px;
+    .filter-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-toggle:hover {
+      border-color: var(--blue);
+      color: var(--text);
+    }
+    .filter-toggle.active {
+      background: rgba(34,197,94,.15);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .filter-toggle input {
+      display: none;
+    }
+    .filter-toggle svg {
+      width: 14px;
+      height: 14px;
     }
 
-    .tabs { display: flex; gap: 8px; }
+    .title-wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .title { font-weight: 700; font-size: 18px; letter-spacing: .2px; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
     .tab-btn {
       border: 1px solid var(--border);
       background: transparent;
@@ -63,520 +78,3624 @@
       font-weight: 600;
     }
     .tab-btn.active {
-      color: #dbeafe;
+      color: var(--text);
       border-color: var(--blue);
-      background: rgba(59, 130, 246, .16);
+      background: rgba(59,130,246,.12);
     }
 
-    .statusline {
+    .status-line {
       font-size: 12px;
       color: var(--muted);
       display: flex;
       gap: 12px;
-      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
-    .content { padding: 16px; }
+    .content { padding: 14px; overflow: auto; }
+
     .view { display: none; }
     .view.active { display: block; }
 
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
     .card {
-      background: var(--card);
       border: 1px solid var(--border);
+      background: var(--card);
       border-radius: 12px;
       padding: 12px;
-      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
-    .card h2 {
-      margin: 0 0 10px;
-      font-size: 15px;
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
     }
 
-    .warning {
-      border: 1px solid rgba(239, 68, 68, .6);
-      background: rgba(239, 68, 68, .12);
-      color: #fecaca;
-      border-radius: 10px;
-      padding: 10px;
+    .card-title { font-size: 15px; font-weight: 700; margin: 0; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 10px;
       font-size: 12px;
-      margin-bottom: 10px;
     }
 
-    .ok {
-      border: 1px solid rgba(34, 197, 94, .5);
-      background: rgba(34, 197, 94, .12);
-      color: #bbf7d0;
-      border-radius: 10px;
-      padding: 10px;
+    .meta-row b { color: var(--muted); font-weight: 600; }
+
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
       font-size: 12px;
-      margin-bottom: 10px;
+      font-weight: 600;
     }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    th, td {
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-      padding: 8px;
-      vertical-align: top;
-    }
-    th { color: var(--muted); font-weight: 600; }
+    .btn:hover { border-color: var(--blue); }
+    .btn.danger:hover { border-color: var(--red); color: #fecaca; }
 
     .badge {
-      display: inline-block;
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid transparent;
       border-radius: 999px;
-      border: 1px solid var(--border);
-      padding: 2px 8px;
       font-size: 11px;
+      padding: 4px 8px;
       font-weight: 700;
       white-space: nowrap;
     }
-    .status-idle, .status-queued, .status-registering { color: #86efac; border-color: rgba(34,197,94,.45); background: rgba(34,197,94,.12); }
-    .status-processing, .status-turn_active, .status-waiting_llm, .status-agent_starting, .status-processing_inbox, .status-streaming, .status-thinking { color: #93c5fd; border-color: rgba(59,130,246,.45); background: rgba(59,130,246,.12); }
-    .status-error, .status-offline, .status-blocked { color: #fecaca; border-color: rgba(239,68,68,.5); background: rgba(239,68,68,.14); }
 
-    .muted { color: var(--muted); }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    /* Agent statuses */
+    .s-idle, .s-queued, .s-registering { background: rgba(34,197,94,.15); color: #86efac; border-color: rgba(34,197,94,.45); }
+    .s-processing, .s-turn_active, .s-waiting_llm, .s-agent_starting, .s-processing_inbox {
+      background: rgba(59,130,246,.15); color: #93c5fd; border-color: rgba(59,130,246,.5); animation: pulse 1.5s infinite;
+    }
+    .s-streaming { background: rgba(168,85,247,.18); color: #d8b4fe; border-color: rgba(168,85,247,.5); }
+    .s-thinking { background: rgba(139,92,246,.18); color: #c4b5fd; border-color: rgba(139,92,246,.45); }
+    .s-tool_running, .s-waiting_response { background: rgba(234,179,8,.18); color: #fde68a; border-color: rgba(234,179,8,.5); }
+    .s-error { background: rgba(239,68,68,.16); color: #fca5a5; border-color: rgba(239,68,68,.55); animation: blink 1.1s steps(1, end) infinite; }
+    .s-offline { background: rgba(51,65,85,.5); color: #94a3b8; border-color: rgba(148,163,184,.3); }
+    .s-blocked { background: rgba(249,115,22,.18); color: #fdba74; border-color: rgba(249,115,22,.55); animation: blink 1.2s steps(1, end) infinite; }
 
-    .task-box {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: #11192d;
-      margin-bottom: 10px;
+    .typing-dots::after {
+      content: '...';
+      display: inline-block;
+      width: 1.2em;
       overflow: hidden;
+      vertical-align: bottom;
+      animation: dots 1.2s steps(4,end) infinite;
     }
-    .task-head {
-      padding: 10px;
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      border-bottom: 1px solid var(--border);
-      flex-wrap: wrap;
+    .spinner {
+      width: 10px; height: 10px; border: 2px solid rgba(255,255,255,.2); border-top-color: currentColor; border-radius: 50%; display: inline-block;
+      animation: spin .8s linear infinite;
     }
-    .task-title { font-weight: 700; }
 
-    .subtasks {
-      padding: 8px 10px 10px;
-      display: grid;
-      gap: 8px;
-    }
-    .subtask {
-      border: 1px solid var(--border);
+    /* Task status colors */
+    .t-planned, .t-backlog, .t-archived { background: rgba(100,116,139,.2); color: #cbd5e1; border: 1px solid rgba(100,116,139,.5); }
+    .t-cancelled { background: rgba(100,116,139,.2); color: #cbd5e1; border: 1px solid rgba(100,116,139,.5); text-decoration: line-through; }
+    .t-ready { background: rgba(125,211,252,.16); color: #bae6fd; border: 1px solid rgba(125,211,252,.5); }
+    .t-in_progress { background: rgba(34,197,94,.17); color: #86efac; border: 1px solid rgba(34,197,94,.5); }
+    .t-ready_for_validation { background: rgba(234,179,8,.2); color: #fde68a; border: 1px solid rgba(234,179,8,.5); }
+    .t-validated { background: rgba(6,182,212,.18); color: #67e8f9; border: 1px solid rgba(6,182,212,.5); }
+    .t-ready_for_pr { background: rgba(249,115,22,.2); color: #fdba74; border: 1px solid rgba(249,115,22,.52); }
+    .t-pr_open { background: rgba(168,85,247,.2); color: #e9d5ff; border: 1px solid rgba(168,85,247,.5); }
+    .t-pr_merged { background: rgba(30,64,175,.22); color: #bfdbfe; border: 1px solid rgba(59,130,246,.5); }
+    .t-done { background: rgba(21,128,61,.22); color: #86efac; border: 1px solid rgba(34,197,94,.45); }
+    .t-blocked { background: rgba(239,68,68,.2); color: #fca5a5; border: 1px solid rgba(239,68,68,.55); }
+    .t-failed { background: rgba(127,29,29,.35); color: #fecaca; border: 1px solid rgba(220,38,38,.55); }
+
+    /* Project status */
+    .p-planned { background: rgba(100,116,139,.2); color: #cbd5e1; border: 1px solid rgba(100,116,139,.5); }
+    .p-active { background: rgba(34,197,94,.18); color: #86efac; border: 1px solid rgba(34,197,94,.5); }
+    .p-blocked { background: rgba(249,115,22,.2); color: #fdba74; border: 1px solid rgba(249,115,22,.55); }
+    .p-completed { background: rgba(59,130,246,.18); color: #93c5fd; border: 1px solid rgba(59,130,246,.5); }
+    .p-failed { background: rgba(239,68,68,.2); color: #fca5a5; border: 1px solid rgba(239,68,68,.55); }
+
+    .error-box {
+      border: 1px solid rgba(239,68,68,.5);
+      background: rgba(239,68,68,.1);
+      color: #fecaca;
       border-radius: 8px;
       padding: 8px;
-      background: #0f172a;
       font-size: 12px;
     }
 
-    .pill {
-      display: inline-block;
+    .history-panel {
+      margin-top: 16px;
       border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 1px 7px;
-      margin-right: 4px;
-      font-size: 11px;
-      color: #cbd5e1;
+      border-radius: 12px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .history-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+    .history-header:hover { background: rgba(255,255,255,.03); }
+    .history-panel.collapsed .history-grid { display: none; }
+    .history-panel.collapsed .history-toggle-icon { transform: rotate(0deg); }
+    .history-toggle-icon {
+      display: inline-block;
+      transition: transform .2s;
+      transform: rotate(90deg);
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .history-grid {
+      padding: 12px;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 12px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x proximity;
+    }
+    .history-grid .card {
+      opacity: .55;
+      min-width: 280px;
+      flex: 0 0 min(320px, 82vw);
+      scroll-snap-align: start;
     }
 
-    .empty {
+    .chip-row, .pill-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      font-size: 11px; color: #d1d5db;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 999px; padding: 3px 8px;
+    }
+    .pill {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
       color: var(--muted);
+    }
+
+    .progress-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      height: 10px;
+      overflow: hidden;
+    }
+    .progress-bar { height: 100%; background: linear-gradient(90deg, var(--green), var(--cyan)); }
+
+    .controls {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    select, .toggle {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+
+    /* Agents tab reorganization */
+    .agents-workspace {
+      display: grid;
+      grid-template-columns: minmax(420px, 1.18fr) minmax(340px, 0.92fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .agents-inventory {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .agent-detail-shell {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: sticky;
+      top: 74px;
+      max-height: calc(100vh - 88px);
+      padding: 8px;
+      border-radius: 16px;
+      border: 1px solid rgba(148,163,184,.22);
+      background: linear-gradient(180deg, rgba(30,41,59,.2) 0%, rgba(15,23,42,.12) 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 18px 36px rgba(2,6,23,.34);
+    }
+    .agent-detail-shell::before {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border-radius: 12px;
+      border: 1px solid rgba(59,130,246,.12);
+      pointer-events: none;
+    }
+    .agent-detail-note {
+      border: 1px solid rgba(59,130,246,.35);
+      background: rgba(59,130,246,.08);
+      border-radius: 12px;
+      padding: 9px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 0 0 auto;
+    }
+    .agent-detail-panel {
+      min-height: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid rgba(148,163,184,.34);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(22,26,37,.98) 0%, rgba(14,18,29,.98) 100%);
+      box-shadow: inset 0 0 0 1px rgba(15,23,42,.55), 0 20px 34px rgba(2,6,23,.32);
+    }
+    .agent-detail-panel .acp-chat-head {
+      padding: 10px 12px;
+      flex: 0 0 auto;
+    }
+    .agent-detail-panel .acp-messages {
+      flex: 1 1 auto;
+      height: auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 12px 12px;
+      background: linear-gradient(180deg, rgba(15,17,23,.78) 0%, rgba(15,17,23,.58) 100%);
+      box-shadow: inset 0 1px 0 rgba(148,163,184,.08), inset 0 -1px 0 rgba(15,23,42,.45);
+    }
+    .agent-detail-panel .acp-composer {
+      padding: 11px;
+      flex: 0 0 auto;
+      border-top: 1px solid rgba(148,163,184,.28);
+      background: linear-gradient(180deg, rgba(15,23,42,.58) 0%, rgba(15,23,42,.34) 100%);
+    }
+    .agent-controls {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 0;
+    }
+    .stats-bar {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      font-size: 12px; font-weight: 600;
+    }
+    .stats-bar .stat {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 4px 10px;
+      color: var(--muted);
+    }
+    .stats-bar .stat b { color: var(--text); }
+    .agent-search {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
       font-size: 13px;
+      min-width: 220px;
+      flex: 1;
+    }
+    .agent-search:focus { outline: none; border-color: var(--blue); }
+    .agent-section {
+      margin-bottom: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .agent-category-header {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      margin: 0;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,255,255,.02);
+      color: var(--muted);
+      cursor: pointer;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .agent-category-header:hover { background: rgba(255,255,255,.05); }
+    .agent-category-title { color: var(--text); }
+    .agent-category-toggle-icon {
+      display: inline-block;
+      transition: transform .2s;
+      transform: rotate(90deg);
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .agent-category-panel.collapsed .agent-category-toggle-icon { transform: rotate(0deg); }
+    .agent-category-panel.collapsed .agent-category-body { display: none; }
+    .agent-category-body { min-width: 0; }
+    .agent-group-note {
+      margin-left: auto;
+      margin-right: 10px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--muted);
+    }
+    .agent-section.alert {
+      border-color: rgba(249,115,22,.55);
+      box-shadow: inset 0 0 0 1px rgba(249,115,22,.2);
+    }
+    .agent-lane {
+      margin-bottom: 0;
       padding: 12px;
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(280px, min(320px, 82vw));
+      gap: 12px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x proximity;
+    }
+    .agent-lane .card.agent-card {
+      margin: 0;
+      width: 100%;
+      min-width: 0;
+      scroll-snap-align: start;
+    }
+    .agent-lane .lane-empty-card {
+      opacity: .65;
+      min-height: 100%;
+    }
+    .card.agent-card {
+      cursor: pointer;
+      transition: border-color .15s, transform .15s, box-shadow .15s;
+    }
+    .card.agent-card:hover {
+      border-color: var(--blue);
+      transform: translateY(-1px);
+    }
+    .card.agent-card.selected {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(6,182,212,.35), 0 12px 28px rgba(15,23,42,.28);
+    }
+    .card.agent-card.selected.coordinator-card {
+      border-color: var(--orange) !important;
+      box-shadow: 0 0 0 1px rgba(249,115,22,.35), 0 12px 28px rgba(15,23,42,.28);
+    }
+    .agent-card-preview {
+      padding-top: 8px;
+      border-top: 1px solid rgba(148,163,184,.18);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .agent-card-preview strong { color: var(--text); }
+    .coordinator-card {
+      border-color: var(--orange) !important;
+      box-shadow: 0 0 0 1px rgba(249,115,22,.25) inset;
+    }
+    .kanban {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+
+    .acp-meta {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .acp-meta b { color: var(--text); }
+    .acp-type-tag {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .acp-empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 40px 20px;
+      font-size: 14px;
+    }
+    /* ── Agent Control Panel ── */
+    .acp-layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 340px) 1fr;
+      gap: 12px;
+      min-height: calc(100vh - 170px);
+    }
+    .acp-sidebar, .acp-panel {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 12px;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .acp-sidebar-head, .acp-chat-head, .acp-composer {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,.02);
+    }
+    .acp-agent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      max-height: calc(100vh - 260px);
+      overflow-y: auto;
+    }
+    .acp-agent-item {
+      width: 100%; text-align: left; cursor: pointer;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--card); color: var(--text);
+      padding: 10px; display: flex; flex-direction: column; gap: 6px;
+      transition: border-color .15s, background .15s;
+    }
+    .acp-agent-item:hover { border-color: var(--blue); }
+    .acp-agent-item.active { border-color: var(--cyan); background: rgba(6,182,212,.1); }
+    .acp-agent-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .acp-preview { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .acp-chat-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    .acp-messages {
+      height: calc(100vh - 330px);
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: rgba(15,17,23,.45);
+    }
+    .acp-composer { border-bottom: none; border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-end; }
+    .acp-input {
+      flex: 1; min-height: 54px; max-height: 160px; resize: vertical;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg); color: var(--text); padding: 10px;
+      font-family: inherit; line-height: 1.4;
+    }
+    .acp-input:focus { outline: none; border-color: var(--blue); }
+    .acp-message { max-width: 92%; display: flex; flex-direction: column; gap: 4px; animation: fadeIn .2s ease; }
+    .acp-message.human { align-self: flex-end; }
+    .acp-message.agent { align-self: flex-start; }
+    .acp-bubble { border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; line-height: 1.55; font-size: 13px; word-break: break-word; }
+    .acp-message.human .acp-bubble { background: rgba(59,130,246,.14); border-color: rgba(59,130,246,.45); border-bottom-right-radius: 4px; white-space: pre-wrap; }
+    .acp-message.agent .acp-bubble { background: var(--card); border-bottom-left-radius: 4px; }
+    .acp-message.error .acp-bubble { border-color: rgba(239,68,68,.55); background: rgba(239,68,68,.1); }
+    .markdown h1, .markdown h2, .markdown h3 { margin: 0 0 8px; line-height: 1.25; }
+    .markdown h1 { font-size: 20px; } .markdown h2 { font-size: 17px; } .markdown h3 { font-size: 15px; }
+    .markdown p { margin: 0 0 8px; }
+    .markdown p:last-child, .markdown ul:last-child, .markdown ol:last-child, .markdown pre:last-child { margin-bottom: 0; }
+    .markdown pre { margin: 8px 0; padding: 10px; border-radius: 8px; overflow-x: auto; background: #090b10; border: 1px solid var(--border); }
+    .markdown code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .markdown :not(pre) > code { background: rgba(255,255,255,.08); padding: 1px 4px; border-radius: 4px; }
+    .markdown ul, .markdown ol { margin: 6px 0 8px 20px; padding: 0; }
+    .markdown li { margin: 3px 0; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .column {
+      min-width: 280px;
+      max-width: 320px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 280px);
+    }
+    .column-header {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+    }
+    .column-body {
+      padding: 10px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .task-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: var(--card);
+      cursor: pointer;
+    }
+    .task-card:hover { border-color: var(--blue); }
+
+    .timeline-list, .event-log-list {
+      list-style: none; padding: 0; margin: 0;
+      display: flex; flex-direction: column; gap: 6px;
+      font-size: 12px;
+    }
+    .timeline-item, .event-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      padding: 8px;
+    }
+    .event-time { color: var(--muted); margin-right: 8px; }
+
+    .ops-shell {
+      display: grid;
+      grid-template-columns: minmax(220px, .9fr) minmax(540px, 1.8fr) minmax(280px, 1fr);
+      gap: 12px;
+      align-items: start;
+      min-height: calc(100vh - 180px);
+    }
+    .ops-nav-panel, .ops-main-panel, .ops-chat-rail {
+      min-height: 0;
+      background: var(--panel);
+    }
+    .ops-panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ops-nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .ops-nav-item {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .ops-nav-item.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(6,182,212,.25) inset;
+    }
+    .ops-tree-project {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15,17,23,.38);
+      overflow: hidden;
+    }
+    .ops-tree-project-head {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .ops-tree-project-head.active { background: rgba(6,182,212,.16); }
+    .ops-tree-project-head .muted { font-size: 11px; }
+    .ops-tree-body {
+      border-top: 1px solid var(--border);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ops-tree-task {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(31,35,48,.65);
+      padding: 6px 8px;
+    }
+    .ops-tree-task.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(6,182,212,.24) inset;
+    }
+    .ops-tree-task-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .ops-tree-task-title { font-size: 12px; font-weight: 600; }
+    .ops-tree-task-owners { margin-top: 4px; font-size: 11px; color: var(--muted); }
+    .ops-tree-subtasks {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ops-tree-subtask {
+      border-radius: 6px;
+      border: 1px dashed var(--border);
+      padding: 4px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      background: rgba(17,20,29,.65);
+    }
+    .ops-tree-subtask.active {
+      border-style: solid;
+      border-color: var(--cyan);
+      background: rgba(6,182,212,.12);
+    }
+    .ops-detail-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .ops-task-detail-panel {
+      border: 1px solid rgba(6,182,212,.45);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(6,182,212,.08), rgba(6,182,212,.02));
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ops-task-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .ops-detail-subtasks {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ops-detail-kv {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 10px;
+      font-size: 12px;
+    }
+    .ops-detail-error {
+      border: 1px solid rgba(239,68,68,.5);
+      border-radius: 8px;
+      background: rgba(239,68,68,.1);
+      color: #fecaca;
+      padding: 8px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ops-detail-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .ops-main-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .blocker-panel {
+      border: 1px solid rgba(249,115,22,.55);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(249,115,22,.1), rgba(239,68,68,.06));
+      padding: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .blocker-panel.clear {
+      border-color: rgba(34,197,94,.4);
+      background: rgba(34,197,94,.08);
+    }
+    .blocker-list {
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .blocker-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(15,17,23,.55);
+      padding: 8px;
+      font-size: 12px;
+    }
+    .blocker-item strong { margin-right: 6px; }
+    .blocker-item.sev-high { border-color: rgba(239,68,68,.5); }
+    .blocker-item.sev-medium { border-color: rgba(249,115,22,.45); }
+    .ops-lane-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      padding: 10px;
+    }
+    .ops-event-log {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15,17,23,.58);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      max-height: 32vh;
+      overflow: hidden;
+    }
+    .ops-event-log.collapsed {
+      grid-template-rows: auto;
+      max-height: 44px;
+    }
+    .ops-event-log.collapsed #opsEventLogList { display: none; }
+    .ops-event-log-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    #opsEventLogList {
+      padding: 10px;
+      overflow: auto;
+      gap: 8px;
+    }
+    .ops-rail-body {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: calc(100vh - 300px);
+      overflow: auto;
+    }
+    .ops-agent-rail { display: flex; flex-direction: column; gap: 8px; }
+    .ops-agent-header { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 10px; }
+    .ops-agent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .ops-agent-messages { border: 1px solid var(--border); border-radius: 10px; background: rgba(15,17,23,.58); padding: 8px; max-height: 38vh; overflow: auto; display:flex; flex-direction:column; gap:8px; }
+    .ops-agent-composer { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 8px; display:flex; flex-direction:column; gap:8px; }
+    .ops-agent-input { min-height: 88px; resize: vertical; }
+    .ops-link { color: var(--cyan); text-decoration: none; }
+    .ops-link:hover { text-decoration: underline; }
+
+    .log-panel {
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+      max-height: 36vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .log-header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border);
+    }
+    .log-body { padding: 10px 14px; overflow: auto; }
+    .log-panel.collapsed { max-height: 46px; grid-template-rows: auto; }
+    .log-panel.collapsed .log-body { display: none; }
+
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none;
+      align-items: center; justify-content: center; z-index: 50;
+      padding: 14px;
+    }
+    .modal.open { display: flex; }
+    .modal-card {
+      width: min(980px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .modal-title { margin: 0; font-size: 20px; }
+    .close-btn { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+
+    .section-title { margin: 12px 0 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+    @keyframes blink { 50% { opacity: .35; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes dots { from { width: 0; } to { width: 1.2em; } }
+
+    .subtask-tables { display: flex; flex-direction: column; gap: 10px; }
+    .subtask-table { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); overflow: hidden; }
+    .subtask-header {
+      display: grid; grid-template-columns: 60px 1fr 1fr 80px; gap: 8px;
+      padding: 8px 12px; background: rgba(255,255,255,.03); border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px;
+    }
+    .subtask-row {
+      display: grid; grid-template-columns: 60px 1fr 1fr 80px; gap: 8px;
+      padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; align-items: center;
+    }
+    .subtask-row:last-child { border-bottom: none; }
+    .subtask-row:hover { background: rgba(255,255,255,.03); }
+    .subtask-col-id { color: var(--muted); font-family: monospace; }
+    .subtask-col-title { font-weight: 600; }
+    .subtask-col-task { color: var(--cyan); }
+    .subtask-col-priority { text-align: right; }
+    .subtask-col-agent { color: var(--green); font-family: monospace; }
+    .subtask-running .subtask-header { grid-template-columns: 60px 1fr 1fr; }
+    .subtask-running .subtask-row { grid-template-columns: 60px 1fr 1fr; }
+
+    @media (max-width: 1100px) {
+      .ops-shell { grid-template-columns: 1fr; }
+      .ops-rail-body { max-height: none; }
+      .agents-workspace { grid-template-columns: 1fr; }
+      .agent-detail-shell { position: static; max-height: none; }
+      .agent-detail-panel { min-height: 0; }
+      .agent-detail-panel .acp-messages { min-height: 42vh; }
+    }
+
+    @media (max-width: 600px) {
+      .grid { grid-template-columns: 1fr; }
+      .ops-main-grid { grid-template-columns: 1fr; }
+      .ops-detail-kv { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .status-line { justify-content: flex-start; }
+      .kanban { overflow-x: auto; }
+      .column { min-width: 88vw; }
+      .acp-layout { grid-template-columns: 1fr; }
+      .acp-agent-list { max-height: 240px; }
+      .acp-messages { height: 50vh; }
+      .agent-detail-panel .acp-messages { min-height: 50vh; }
+      .acp-composer { flex-direction: column; align-items: stretch; }
     }
   </style>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="title">Fabric Monitor v2</div>
-      <nav class="tabs">
-        <button class="tab-btn active" data-tab="agents">Agentes</button>
-        <button class="tab-btn" data-tab="projects">Proyectos</button>
-        <button class="tab-btn" data-tab="tasks">Tareas + Subtareas</button>
-      </nav>
-      <div class="statusline">
-        <span id="connState">API: ...</span>
-        <span id="lastRefresh">Última actualización: -</span>
+      <div class="title-wrap">
+        <div class="title">🔮 Fabric Monitor</div>
+        <nav class="tabs">
+          <button class="tab-btn active" data-tab="operations">Operations</button>
+          <button class="tab-btn" data-tab="agents">Agents</button>
+          <button class="tab-btn" data-tab="projects">Projects</button>
+          <button class="tab-btn" data-tab="tasks">Tasks</button>
+          <button class="tab-btn" data-tab="timeline">Timeline</button>
+          <button class="tab-btn" data-tab="subtasks">Subtasks</button>
+        </nav>
+      </div>
+      <div class="status-line">
+        <button class="filter-toggle" id="activeFilterToggle" onclick="toggleActiveFilter()" title="Mostrar solo proyectos y tareas activos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          <span id="activeFilterLabel">Solo activos</span>
+        </button>
+        <span id="sseStatus">SSE: connecting…</span>
+        <span id="lastSync">Sync: --</span>
+        <span id="telegramStatus" title="Telegram bridge status">📵 Telegram: offline</span>
       </div>
     </header>
 
     <main class="content">
-      <section id="view-agents" class="view active">
-        <div class="card">
-          <h2>Jerarquía de agentes</h2>
-          <div id="agentsInvariant"></div>
-          <div id="agentsTableWrap"></div>
+      <section class="view active" id="view-operations">
+        <div class="ops-shell">
+          <aside class="ops-nav-panel card">
+            <div class="ops-panel-head">
+              <strong>Operations Navigation</strong>
+              <span class="muted" id="opsAgentTotal">0 agents</span>
+            </div>
+            <div id="opsNavList" class="ops-nav-list"></div>
+          </aside>
+
+          <section class="ops-main-panel card">
+            <div class="ops-panel-head">
+              <strong id="opsLaneTitle">Live Coordination</strong>
+              <div class="chip-row">
+                <span class="chip" id="opsTasksCount">Tasks: 0</span>
+                <span class="chip" id="opsProjectsCount">Projects: 0</span>
+              </div>
+            </div>
+            <div id="blockerPanel" class="blocker-panel clear"></div>
+            <div id="opsMainGrid" class="ops-main-grid"></div>
+            <div id="opsEventLogPanel" class="ops-event-log">
+              <div class="ops-event-log-head">
+                <strong>Live Operations Event Log</strong>
+                <button class="btn" data-action="toggle-ops-log">Collapse</button>
+              </div>
+              <ul id="opsEventLogList" class="event-log-list"></ul>
+            </div>
+          </section>
+
+          <aside class="ops-chat-rail card">
+            <div class="ops-panel-head">
+              <strong>Agent Detail / Chat Rail</strong>
+              <span class="muted" id="opsRailAgent">No agent selected</span>
+            </div>
+            <div id="opsRailBody" class="ops-rail-body">
+              <p class="muted">Reserved rail for selected agent details, quick controls, and live chat context.</p>
+            </div>
+          </aside>
         </div>
       </section>
 
-      <section id="view-projects" class="view">
-        <div class="card">
-          <h2>Resumen de proyectos</h2>
-          <div id="projectsTableWrap"></div>
+      <section class="view" id="view-agents">
+        <div class="agents-workspace">
+          <section class="agents-inventory">
+            <div class="agent-controls">
+              <div class="stats-bar" id="agentStatsBar"></div>
+              <label class="muted" for="agentGroupingMode">Group by</label>
+              <select id="agentGroupingMode" title="Agent inventory grouping mode">
+                <option value="hierarchy">Hierarchy</option>
+                <option value="role">Role</option>
+                <option value="status">Status</option>
+                <option value="lifecycle">Lifecycle</option>
+              </select>
+              <input type="search" id="agentSearch" class="agent-search" placeholder="🔍 Filtrar agentes..." />
+            </div>
+
+            <div id="agentGroupedSections"></div>
+
+            <div id="historyAgentsPanel" class="history-panel collapsed">
+              <div class="history-header" data-action="toggle-history">
+                <span class="history-toggle-icon">▶</span>
+                <strong>History / Offline Agents</strong>
+                <span id="historyCount" class="muted">(0)</span>
+                <button class="btn danger" data-action="purge-offline" style="margin-left:auto;">🧹 Purgar muertos</button>
+              </div>
+              <div id="historyAgentsGrid" class="history-grid"></div>
+            </div>
+          </section>
+
+          <aside class="agent-detail-shell">
+            <div id="acpHeader" hidden aria-hidden="true"></div>
+            <section class="acp-panel agent-detail-panel">
+              <div id="acpMessages" class="acp-messages"></div>
+              <div class="acp-composer">
+                <textarea id="acpInput" class="acp-input" placeholder="Escribe un mensaje para el agente seleccionado…"></textarea>
+                <div class="actions" style="margin:0;">
+                  <button class="btn" data-action="send-acp-message">Enviar 📤</button>
+                  <button class="btn" data-action="open-acp-task-modal">📋 Tarea</button>
+                  <button class="btn" data-action="refresh-acp">Refresh</button>
+                </div>
+              </div>
+            </section>
+          </aside>
         </div>
       </section>
 
-      <section id="view-tasks" class="view">
-        <div class="card">
-          <h2>Tareas y subtareas</h2>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; align-items:center;">
-            <label class="muted">Proyecto
-              <select id="filterProject" style="margin-left:6px; background:#0f172a; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px;">
-                <option value="">Todos</option>
-              </select>
-            </label>
-            <label class="muted">Task ID
-              <input id="filterTaskId" type="number" min="1" placeholder="ej: 42" style="margin-left:6px; width:120px; background:#0f172a; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px;" />
-            </label>
-            <label class="muted">Status
-              <select id="filterStatus" style="margin-left:6px; background:#0f172a; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px;">
-                <option value="">Todos</option>
-                <option value="draft">draft</option>
-                <option value="in_progress">in_progress</option>
-                <option value="completed">completed</option>
-                <option value="failed">failed</option>
-              </select>
-            </label>
-            <button id="applyTaskFilters" class="action-btn" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); cursor:pointer;">Aplicar</button>
-            <button id="resetTaskFilters" class="action-btn" style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); cursor:pointer;">Limpiar</button>
-          </div>
-          <div id="tasksWrap"></div>
+      <section class="view" id="view-projects">
+        <div id="projectsGrid" class="grid"></div>
+      </section>
+
+      <section class="view" id="view-tasks">
+        <div class="controls">
+          <label class="muted" for="projectFilter">Proyecto</label>
+          <select id="projectFilter">
+            <option value="">Todos</option>
+          </select>
+          <button class="btn" data-action="refresh-tasks">Refresh tasks</button>
+        </div>
+        <div id="kanbanBoard" class="kanban"></div>
+      </section>
+
+      <section class="view" id="view-timeline">
+        <div class="controls">
+          <label class="toggle"><input type="checkbox" id="tfAgents" checked> Agentes</label>
+          <label class="toggle"><input type="checkbox" id="tfProjects" checked> Proyectos</label>
+          <label class="toggle"><input type="checkbox" id="tfErrors" checked> Errores</label>
+          <label class="toggle"><input type="checkbox" id="tfPRs" checked> PRs</label>
+          <button class="btn" data-action="toggle-timeline-pause">Pausar timeline</button>
+        </div>
+        <ul id="timelineList" class="timeline-list"></ul>
+      </section>
+
+      <section class="view" id="view-subtasks">
+        <div class="agent-controls">
+          <div class="stats-bar" id="subtaskStatsBar"></div>
+        </div>
+        <div class="subtask-tables">
+          <div class="section-label">📥 Ready</div>
+          <div id="subtaskReadyTable" class="subtask-table"></div>
+          <div class="section-label" style="margin-top:14px;">🏃 Running</div>
+          <div id="subtaskRunningTable" class="subtask-table"></div>
         </div>
       </section>
     </main>
+
+    <aside id="logPanel" class="log-panel">
+      <div class="log-header">
+        <div><strong>📜 Live Event Log</strong></div>
+        <div class="actions">
+          <button class="btn" data-action="toggle-log-collapse">Colapsar</button>
+          <button class="btn" data-action="toggle-log-pause">Pausar</button>
+          <button class="btn" data-action="clear-log">Limpiar</button>
+        </div>
+      </div>
+      <div id="logBody" class="log-body">
+        <ul id="eventLogList" class="event-log-list"></ul>
+      </div>
+    </aside>
+  </div>
+
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="modalTitle" class="modal-title">Detalle</h2>
+        <button class="close-btn" data-action="close-modal">Cerrar</button>
+      </div>
+      <div id="modalContent"></div>
+    </div>
   </div>
 
   <script>
-    const state = {
-      activeTab: 'agents',
-      agents: null,
-      projects: null,
-      tasks: null,
-      taskFilters: {
-        project_id: '',
-        task_id: '',
-        status: '',
-      },
-    };
+    const API = ''; // Rutas relativas — dashboard servido desde mismo servidor
+    const UI_STATE_KEY = 'dashboardUiStateV1';
 
-    const el = {
-      connState: document.getElementById('connState'),
-      lastRefresh: document.getElementById('lastRefresh'),
-      agentsInvariant: document.getElementById('agentsInvariant'),
-      agentsTableWrap: document.getElementById('agentsTableWrap'),
-      projectsTableWrap: document.getElementById('projectsTableWrap'),
-      tasksWrap: document.getElementById('tasksWrap'),
-      filterProject: document.getElementById('filterProject'),
-      filterTaskId: document.getElementById('filterTaskId'),
-      filterStatus: document.getElementById('filterStatus'),
-      applyTaskFilters: document.getElementById('applyTaskFilters'),
-      resetTaskFilters: document.getElementById('resetTaskFilters'),
-    };
-
-    function setConn(ok, note = '') {
-      el.connState.textContent = ok ? `API: ok ${note}` : `API: error ${note}`;
-      el.connState.style.color = ok ? '#86efac' : '#fecaca';
-    }
-
-    function markRefresh() {
-      el.lastRefresh.textContent = `Última actualización: ${new Date().toLocaleTimeString()}`;
-    }
-
-    async function fetchJson(url, allow409 = false) {
-      const res = await fetch(url);
-      if (!res.ok && !(allow409 && res.status === 409)) {
-        throw new Error(`${res.status} ${res.statusText}`);
+    function readUiState() {
+      try {
+        const raw = localStorage.getItem(UI_STATE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
       }
-      return await res.json();
     }
 
-    function statusBadge(value) {
-      const v = String(value || 'unknown');
-      const klass = `status-${v.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-      return `<span class="badge ${klass}">${v}</span>`;
+    const persistedUiState = readUiState();
+
+    const state = {
+      activeTab: persistedUiState.activeTab || 'operations',
+      // Normalized entity store (v2 monitor adapters)
+      agents: new Map(),
+      projects: new Map(),
+      tasks: new Map(),
+      subtasks: new Map(),
+      taskSubtasks: new Map(),
+      projectTasks: new Map(),
+      allEvents: [],
+      logEvents: [],
+      logPaused: false,
+      timelinePaused: false,
+      sseConnected: false,
+      projectEventSince: 0,
+      showOnlyActive: localStorage.getItem('filterActive') === 'true',
+      agentSearchQuery: '',
+      agentGroupingMode: persistedUiState.agentGroupingMode || localStorage.getItem('agentGroupingMode') || 'hierarchy',
+      agentGroupCollapsed: (() => {
+        try {
+          return JSON.parse(localStorage.getItem('agentGroupCollapsed') || '{}') || {};
+        } catch {
+          return {};
+        }
+      })(),
+      acpAutoRefresh: true,
+      acpPaused: false,
+      acpSelectedAgentId: persistedUiState.acpSelectedAgentId || localStorage.getItem('acpSelectedAgentId') || '',
+      acpOutputs: new Map(),
+      acpHumanMessages: new Map(),
+      acpPreviewRequested: new Set(),
+      acpSending: false,
+      acpRenderedAgentId: '',
+      acpHeaderSignature: '',
+      acpMessagesSignature: '',
+      subtasksQueue: { ready: [], running: [], blocked: [], counts: { ready: 0, running: 0, blocked: 0 } },
+      operationsLane: 'coordinators',
+      operationsSelection: (() => {
+        const raw = persistedUiState.operationsSelection;
+        if (!raw || typeof raw !== 'object') return { type: 'project', projectId: null, taskId: null, subtaskId: null };
+        return {
+          type: ['project', 'task', 'subtask'].includes(raw.type) ? raw.type : 'project',
+          projectId: Number.isFinite(Number(raw.projectId)) ? Number(raw.projectId) : null,
+          taskId: Number.isFinite(Number(raw.taskId)) ? Number(raw.taskId) : null,
+          subtaskId: Number.isFinite(Number(raw.subtaskId)) ? Number(raw.subtaskId) : null,
+        };
+      })(),
+      operationsExpandedProjects: (persistedUiState.operationsExpandedProjects && typeof persistedUiState.operationsExpandedProjects === 'object')
+        ? persistedUiState.operationsExpandedProjects
+        : {},
+      operationsLogCollapsed: Boolean(persistedUiState.operationsLogCollapsed),
+      projectFilterId: persistedUiState.projectFilterId ? String(persistedUiState.projectFilterId) : '',
+      historyPanelCollapsed: persistedUiState.historyPanelCollapsed !== false,
+      eventLogCollapsed: Boolean(persistedUiState.eventLogCollapsed),
+      staleThresholds: {
+        taskMs: 20 * 60 * 1000,
+        subtaskMs: 15 * 60 * 1000,
+        waitingMs: 2 * 60 * 1000,
+        agentIdleMs: 8 * 60 * 1000,
+      },
+      blockers: [],
+    };
+
+    function persistUiState(patch = {}) {
+      const next = { ...readUiState(), ...patch };
+      try { localStorage.setItem(UI_STATE_KEY, JSON.stringify(next)); } catch {}
     }
 
-    async function loadAgents() {
-      const data = await fetchJson('/api/agents?hierarchy=true', true);
-      state.agents = data;
+    const refs = {
+      historyAgentsGrid: document.getElementById('historyAgentsGrid'),
+      historyAgentsPanel: document.getElementById('historyAgentsPanel'),
+      historyCount: document.getElementById('historyCount'),
+      projectsGrid: document.getElementById('projectsGrid'),
+      kanbanBoard: document.getElementById('kanbanBoard'),
+      projectFilter: document.getElementById('projectFilter'),
+      timelineList: document.getElementById('timelineList'),
+      eventLogList: document.getElementById('eventLogList'),
+      sseStatus: document.getElementById('sseStatus'),
+      lastSync: document.getElementById('lastSync'),
+      telegramStatus: document.getElementById('telegramStatus'),
+      logPanel: document.getElementById('logPanel'),
+      modal: document.getElementById('modal'),
+      modalTitle: document.getElementById('modalTitle'),
+      modalContent: document.getElementById('modalContent'),
+      tfAgents: document.getElementById('tfAgents'),
+      tfProjects: document.getElementById('tfProjects'),
+      tfErrors: document.getElementById('tfErrors'),
+      tfPRs: document.getElementById('tfPRs'),
+      agentGroupedSections: document.getElementById('agentGroupedSections'),
+      agentGroupingMode: document.getElementById('agentGroupingMode'),
+      agentStatsBar: document.getElementById('agentStatsBar'),
+      agentSearch: document.getElementById('agentSearch'),
+      acpHeader: document.getElementById('acpHeader'),
+      acpMessages: document.getElementById('acpMessages'),
+      acpInput: document.getElementById('acpInput'),
+      subtaskStatsBar: document.getElementById('subtaskStatsBar'),
+      subtaskReadyTable: document.getElementById('subtaskReadyTable'),
+      subtaskRunningTable: document.getElementById('subtaskRunningTable'),
+      opsNavList: document.getElementById('opsNavList'),
+      opsMainGrid: document.getElementById('opsMainGrid'),
+      blockerPanel: document.getElementById('blockerPanel'),
+      opsAgentTotal: document.getElementById('opsAgentTotal'),
+      opsTasksCount: document.getElementById('opsTasksCount'),
+      opsProjectsCount: document.getElementById('opsProjectsCount'),
+      opsLaneTitle: document.getElementById('opsLaneTitle'),
+      opsRailAgent: document.getElementById('opsRailAgent'),
+      opsRailBody: document.getElementById('opsRailBody'),
+      opsEventLogList: document.getElementById('opsEventLogList'),
+      opsEventLogPanel: document.getElementById('opsEventLogPanel'),
+    };
+
+    const AGENT_BUSY = new Set(['processing','turn_active','waiting_llm','agent_starting','processing_inbox']);
+    const AGENT_STREAM = new Set(['streaming']);
+    const AGENT_THINK = new Set(['thinking']);
+    const AGENT_TOOL = new Set(['tool_running']);
+    const AGENT_WAIT = new Set(['waiting_response']);
+
+    function escapeHtml(str) {
+      return String(str ?? '').replace(/[&<>"']/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+    }
+    function nowStr() { return new Date().toLocaleTimeString(); }
+    function fmtDate(ts) {
+      try { return new Date(ts).toLocaleString(); } catch { return String(ts || '--'); }
+    }
+
+    function agentStatus(agent) {
+      return (agent.fabric_status || agent.status || 'offline').toString();
+    }
+    function agentBadge(status) {
+      const s = status || 'offline';
+      let icon = '●', extra = '', text = s;
+      if (AGENT_STREAM.has(s)) { icon = '🟣'; extra = 'typing-dots'; text = 'streaming'; }
+      else if (AGENT_THINK.has(s)) { icon = '🧠'; text = 'thinking'; }
+      else if (AGENT_TOOL.has(s)) { icon = '<span class="spinner"></span>'; text = 'tool_running'; }
+      else if (AGENT_WAIT.has(s)) { icon = '⏳'; }
+      else if (s === 'error') { icon = '🔴'; }
+      else if (s === 'blocked') { icon = '🟠'; }
+      else if (s === 'offline') { icon = '⚫'; }
+      else if (AGENT_BUSY.has(s)) { icon = '🔵'; }
+      else { icon = '🟢'; }
+
+      return `<span class="badge s-${escapeHtml(s)} ${extra}">${icon} ${escapeHtml(text)}</span>`;
+    }
+
+    function taskStatusBadge(status) {
+      const s = (status || 'planned').toString();
+      return `<span class="badge t-${escapeHtml(s)}">${escapeHtml(s)}</span>`;
+    }
+    function projectStatusBadge(status) {
+      const s = (status || 'planned').toString();
+      return `<span class="badge p-${escapeHtml(s)}">${escapeHtml(s)}</span>`;
+    }
+
+    function toggleActiveFilter() {
+      state.showOnlyActive = !state.showOnlyActive;
+      localStorage.setItem('filterActive', state.showOnlyActive ? 'true' : 'false');
+      updateFilterToggleUI();
+      if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'tasks') renderTasks();
+    }
+
+    function updateFilterToggleUI() {
+      const toggle = document.getElementById('activeFilterToggle');
+      const label = document.getElementById('activeFilterLabel');
+      if (state.showOnlyActive) {
+        toggle.classList.add('active');
+        label.textContent = 'Solo activos ✓';
+      } else {
+        toggle.classList.remove('active');
+        label.textContent = 'Solo activos';
+      }
+    }
+
+    function shouldShowProject(p) {
+      if (!state.showOnlyActive) return true;
+      return p.status === 'active';
+    }
+
+    function shouldShowTask(t) {
+      if (!state.showOnlyActive) return true;
+      const project = state.projects.get(Number(t.project_id));
+      if (project && project.status !== 'active') return false;
+      return true;
+    }
+
+    function normalizeProjectEntity(project = {}) {
+      const id = Number(project.id ?? project.project_id ?? project.projectId);
+      if (!Number.isFinite(id)) return null;
+      const status = project.status || 'planned';
+      const taskCounts = project.task_counts?.by_status || project.task_counts || {};
+      const totalTasks = project.total_tasks ?? project.task_counts?.total;
+      return {
+        ...project,
+        id,
+        project_id: id,
+        code: project.code || project.project_code || `p${id}`,
+        name: project.name || `Project ${id}`,
+        status,
+        task_counts: taskCounts,
+        total_tasks: Number.isFinite(totalTasks) ? totalTasks : undefined,
+      };
+    }
+
+    function normalizeTaskEntity(task = {}) {
+      const id = Number(task.id ?? task.task_id ?? task.taskId);
+      if (!Number.isFinite(id)) return null;
+      const projectId = Number(task.project_id ?? task.projectId);
+      return {
+        ...task,
+        id,
+        project_id: Number.isFinite(projectId) ? projectId : task.project_id,
+      };
+    }
+
+    function normalizeSubtaskEntity(subtask = {}, parentTaskId = null) {
+      const id = Number(subtask.id ?? subtask.subtask_id ?? subtask.subtaskId);
+      if (!Number.isFinite(id)) return null;
+      const taskId = Number(subtask.task_id ?? subtask.taskId ?? parentTaskId);
+      return {
+        ...subtask,
+        id,
+        task_id: Number.isFinite(taskId) ? taskId : parentTaskId,
+      };
+    }
+
+    function upsertSubtask(subtask, options = {}) {
+      const normalized = normalizeSubtaskEntity(subtask, options.taskId);
+      if (!normalized || normalized.task_id == null) return null;
+      const prev = state.subtasks.get(normalized.id) || {};
+      const merged = { ...prev, ...normalized, _lastSnapshot: Date.now() };
+      state.subtasks.set(normalized.id, merged);
+      const taskId = Number(merged.task_id);
+      if (Number.isFinite(taskId)) {
+        const current = state.taskSubtasks.get(taskId) || [];
+        if (!current.includes(merged.id)) state.taskSubtasks.set(taskId, [...current, merged.id]);
+      }
+      return merged;
+    }
+
+    function syncTaskSubtasks(taskId, subtasks = []) {
+      if (!Number.isFinite(Number(taskId))) return [];
+      const normalized = subtasks
+        .map((sub) => upsertSubtask(sub, { taskId }))
+        .filter(Boolean);
+      state.taskSubtasks.set(Number(taskId), normalized.map((s) => s.id));
+      return normalized;
+    }
+
+    function materializeTaskSubtasks(taskId) {
+      const ids = state.taskSubtasks.get(Number(taskId)) || [];
+      return ids.map((id) => state.subtasks.get(id)).filter(Boolean);
+    }
+
+    function setAgents(list = []) {
+      const incomingIds = new Set();
+      for (const a of list) {
+        if (!a?.agent_id) continue;
+        incomingIds.add(a.agent_id);
+        const prev = state.agents.get(a.agent_id) || {};
+        state.agents.set(a.agent_id, { ...prev, ...a, _lastSnapshot: Date.now() });
+      }
+      const now = Date.now();
+      for (const [id, a] of state.agents.entries()) {
+        if (!incomingIds.has(id) && (now - (a._lastSnapshot || 0)) > 40000) {
+          if (a.fabric_status !== 'offline' && a.fabric_status !== 'shutting_down') {
+            a.fabric_status = 'offline';
+            a.process_alive = false;
+          }
+        }
+      }
+      renderAgents();
+      renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function removeAgent(agentId) {
+      state.agents.delete(agentId);
+      if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function upsertAgent(a) {
+      if (!a || !a.agent_id) return;
+      const prev = state.agents.get(a.agent_id) || {};
+      state.agents.set(a.agent_id, { ...prev, ...a, _lastSnapshot: Date.now() });
+      if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function setProjects(list = []) {
+      for (const raw of list) {
+        const p = normalizeProjectEntity(raw);
+        if (!p) continue;
+        const prev = state.projects.get(p.id) || {};
+        state.projects.set(p.id, { ...prev, ...p, _lastSnapshot: Date.now() });
+      }
+      renderProjects();
+      populateProjectFilter();
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function removeProject(projectId) {
+      state.projects.delete(Number(projectId));
+      state.projectTasks.delete(Number(projectId));
+      if (state.activeTab === 'projects') renderProjects();
+      populateProjectFilter();
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function upsertProject(p) {
+      const normalized = normalizeProjectEntity(p);
+      if (!normalized) return;
+      const prev = state.projects.get(normalized.id) || {};
+      state.projects.set(normalized.id, { ...prev, ...normalized, _lastSnapshot: Date.now() });
+      if (state.activeTab === 'projects') renderProjects();
+      populateProjectFilter();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function setTasks(list = []) {
+      for (const raw of list) {
+        const task = normalizeTaskEntity(raw);
+        if (!task) continue;
+        const prev = state.tasks.get(task.id) || {};
+        const merged = { ...prev, ...task, _lastSnapshot: Date.now(), _stale: false };
+        state.tasks.set(task.id, merged);
+
+        const projectId = Number(merged.project_id);
+        if (Number.isFinite(projectId)) {
+          const projectTaskIds = state.projectTasks.get(projectId) || [];
+          if (!projectTaskIds.includes(merged.id)) state.projectTasks.set(projectId, [...projectTaskIds, merged.id]);
+        }
+
+        if (Array.isArray(raw.subtasks)) {
+          const normalizedSubtasks = syncTaskSubtasks(task.id, raw.subtasks);
+          merged.subtasks = normalizedSubtasks;
+          state.tasks.set(task.id, merged);
+        } else if (!Array.isArray(merged.subtasks)) {
+          merged.subtasks = materializeTaskSubtasks(task.id);
+          state.tasks.set(task.id, merged);
+        }
+      }
+      renderTasks();
+      if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function removeTask(taskId) {
+      const id = Number(taskId);
+      const prev = state.tasks.get(id);
+      state.tasks.delete(id);
+      if (prev?.project_id != null) {
+        const projectId = Number(prev.project_id);
+        const ids = state.projectTasks.get(projectId) || [];
+        state.projectTasks.set(projectId, ids.filter((tid) => tid !== id));
+      }
+      const subIds = state.taskSubtasks.get(id) || [];
+      for (const subId of subIds) state.subtasks.delete(subId);
+      state.taskSubtasks.delete(id);
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function upsertTask(t) {
+      const task = normalizeTaskEntity(t);
+      if (!task) return;
+      const prev = state.tasks.get(task.id) || {};
+      const merged = { ...prev, ...task, _stale: false, _lastSnapshot: Date.now() };
+      state.tasks.set(task.id, merged);
+
+      const projectId = Number(merged.project_id);
+      if (Number.isFinite(projectId)) {
+        const ids = state.projectTasks.get(projectId) || [];
+        if (!ids.includes(merged.id)) state.projectTasks.set(projectId, [...ids, merged.id]);
+      }
+
+      if (Array.isArray(task.subtasks)) {
+        merged.subtasks = syncTaskSubtasks(task.id, task.subtasks);
+        state.tasks.set(task.id, merged);
+      } else {
+        merged.subtasks = materializeTaskSubtasks(task.id);
+        state.tasks.set(task.id, merged);
+      }
+
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function addEventLog(kind, message, payload = {}, source = 'system') {
+      const event = {
+        ts: Date.now(),
+        kind, message, payload, source,
+        isError: /error|failed|blocked/i.test(kind + ' ' + message),
+        isPR: /pr_|pull|merged/i.test(kind + ' ' + message + ' ' + JSON.stringify(payload || {}))
+      };
+      state.allEvents.push(event);
+      if (state.allEvents.length > 1000) state.allEvents.shift();
+
+      if (!state.logPaused) {
+        state.logEvents.push(event);
+        if (state.logEvents.length > 300) state.logEvents.shift();
+        renderEventLog();
+      }
+      if (!state.timelinePaused && state.activeTab === 'timeline') renderTimeline();
+      if (state.activeTab === 'operations') renderOperationsEventLog();
+    }
+
+    const WORKER_BUSY = new Set(['processing','turn_active','waiting_llm','agent_starting','processing_inbox','streaming','thinking','tool_running','waiting_response']);
+
+    function getAgentDisplayName(agent) {
+      return agent.display_name || agent.agent_id;
+    }
+
+    function fallbackActivityLabel(agent) {
+      const status = agentStatus(agent);
+      if (!agent.process_alive || status === 'offline' || status === 'shutting_down') return 'Offline';
+      if (agent.active_tool) return `Using ${agent.active_tool}`;
+      if (status === 'streaming') return 'Streaming response';
+      if (status === 'thinking') return 'Thinking';
+      if (status === 'waiting_llm') return 'Waiting LLM';
+      if (status === 'waiting_response') return 'Waiting response';
+      if (['processing','turn_active','agent_starting','processing_inbox'].includes(status)) return 'Processing inbox';
+      if (status === 'blocked') return 'Blocked';
+      if (status === 'error') return 'Error state';
+      if (agent.pm_subtask_id != null) return `Subtask #${agent.pm_subtask_id} ${agent.pm_subtask_status || 'assigned'}`;
+      if (agent.pm_task_id != null) return `Task #${agent.pm_task_id} ${agent.pm_task_status || 'assigned'}`;
+      if (agent.current_task) return `Task context ${agent.current_task}`;
+      if ((agent.queue_length ?? 0) > 0) return `Queue ${agent.queue_length}`;
+      if ((agent.mailbox_pending ?? 0) > 0) return `Mailbox pending ${agent.mailbox_pending} bytes`;
+      return 'Idle';
+    }
+
+    function renderAgentContext(agent) {
+      if (agent.pm_subtask_id != null) {
+        const subTitle = agent.pm_subtask_title || (agent.display_context || '').split('·').slice(-1)[0]?.trim() || `Subtask #${agent.pm_subtask_id}`;
+        const taskId = agent.pm_task_id;
+        return `<div><b>Subtask:</b> #${escapeHtml(agent.pm_subtask_id)} · ${escapeHtml(agent.pm_subtask_status || '--')} · ${escapeHtml(subTitle || '--')}${taskId != null ? ` <span class="muted">(Task <a href="#" data-action="open-task" data-task-id="${escapeHtml(taskId)}">#${escapeHtml(taskId)}</a>)</span>` : ''}</div>`;
+      }
+      if (agent.pm_task_id != null) {
+        return `<div><b>Task:</b> <a href="#" data-action="open-task" data-task-id="${escapeHtml(agent.pm_task_id)}">#${escapeHtml(agent.pm_task_id)}</a> · ${escapeHtml(agent.pm_task_status || '--')} · ${escapeHtml(agent.pm_task_title || `Task #${agent.pm_task_id}`)}</div>`;
+      }
+      const curTask = agent.current_task;
+      if (curTask != null) {
+        const id = typeof curTask === 'object' ? curTask.id : curTask;
+        const title = typeof curTask === 'object' ? (curTask.title || `Task #${id}`) : `Task #${id}`;
+        return `<div><b>Current task:</b> <a href="#" data-action="open-task" data-task-id="${escapeHtml(id)}">${escapeHtml(title)}</a></div>`;
+      }
+      return '';
+    }
+
+    function agentCard(a) {
+      const s = agentStatus(a);
+      const isCoordinator = a.role === 'coordinator' || a.role === 'sub-coordinator';
+      const isDead = !a.process_alive || a.fabric_status === 'offline' || a.fabric_status === 'shutting_down';
+      const selected = state.acpSelectedAgentId === a.agent_id;
+      const contextHtml = renderAgentContext(a);
+      const pendingCorr = (a.pending_correlations?.length ?? 0) || (a.pending_correlation_ids?.length ?? 0);
+      const coordClass = isCoordinator ? 'coordinator-card' : '';
+      const outputs = getAcpOutputs(a.agent_id);
+      const previewRaw = outputs[outputs.length - 1]?.content || a.display_context || (typeof a.current_task === 'object' ? a.current_task?.title : a.current_task) || '';
+      const preview = String(previewRaw || '').replace(/\s+/g, ' ').trim();
+      const previewHtml = preview
+        ? `<div class="agent-card-preview"><strong>Preview:</strong> ${escapeHtml(preview.slice(0, 160))}${preview.length > 160 ? '…' : ''}</div>`
+        : '';
+      const activityLabel = a.activity_label || fallbackActivityLabel(a);
+      const depthPrefix = Number(a._hierarchy_depth || 0) > 0 ? `${'↳ '.repeat(Math.min(Number(a._hierarchy_depth || 0), 4))}` : '';
+      return `
+        <article class="card agent-card ${coordClass} ${selected ? 'selected' : ''}" style="${isDead ? 'opacity:.65;' : ''}" data-action="select-agent-card" data-agent-id="${escapeHtml(a.agent_id)}">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">${escapeHtml(depthPrefix)}${escapeHtml(getAgentDisplayName(a))} ${isCoordinator ? '<span style="color:var(--orange)">👑</span>' : ''}</h3>
+              <div class="muted">${escapeHtml(a.display_role || a.role || 'agent')} ${isDead ? '<span style="color:var(--red)">● muerto</span>' : ''}${selected ? ' · <span style="color:var(--cyan)">seleccionado</span>' : ''}</div>
+            </div>
+            ${agentBadge(s)}
+          </div>
+          <div class="meta-grid">
+            <div class="meta-row"><b>model:</b> ${escapeHtml(a.model || '--')}</div>
+            <div class="meta-row"><b>session:</b> ${escapeHtml(a.session_id || a.session || '--')}</div>
+            <div class="meta-row"><b>PID:</b> ${escapeHtml(a.pid ?? '--')} ${a.process_alive ? '<span style="color:var(--green)">●</span>' : '<span style="color:var(--red)">●</span>'}</div>
+            <div class="meta-row"><b>pane:</b> ${escapeHtml(a.pane_id || a.pane || '--')}</div>
+            <div class="meta-row"><b>queue:</b> ${escapeHtml(a.queue_length ?? 0)}</div>
+            <div class="meta-row"><b>mailbox:</b> ${escapeHtml(a.mailbox_pending ?? a.mailbox_size ?? '--')} bytes</div>
+            <div class="meta-row"><b>activity:</b> ${escapeHtml(activityLabel)}</div>
+            <div class="meta-row"><b>pending corr:</b> ${escapeHtml(pendingCorr)}</div>
+            <div class="meta-row"><b>parent:</b> ${escapeHtml(a.parent_agent_id || '--')}</div>
+            <div class="meta-row"><b>depth:</b> ${escapeHtml(a._hierarchy_depth ?? 0)}</div>
+          </div>
+          ${contextHtml}
+          ${previewHtml}
+          ${a.last_error ? `<div class="error-box">${escapeHtml(a.last_error)}</div>` : ''}
+          <div class="actions">
+            <button class="btn" data-action="ping-agent" data-agent-id="${escapeHtml(a.agent_id)}">Ping</button>
+            <button class="btn" data-action="view-log" data-agent-id="${escapeHtml(a.agent_id)}">View Log</button>
+            ${!isCoordinator ? `<button class="btn danger" data-action="kill-agent" data-agent-id="${escapeHtml(a.agent_id)}">Kill</button>` : ''}
+          </div>
+        </article>`;
+    }
+
+    function matchesAgentSearch(a, q) {
+      if (!q) return true;
+      const hay = `${a.agent_id} ${a.display_name || ''} ${a.role || ''} ${a.display_role || ''} ${a.session || ''} ${a.model || ''} ${a.display_context || ''} ${a.pm_task_title || ''} ${a.pm_subtask_title || ''}`.toLowerCase();
+      return hay.includes(q.toLowerCase());
+    }
+
+    function persistAgentGroupState() {
+      localStorage.setItem('agentGroupCollapsed', JSON.stringify(state.agentGroupCollapsed || {}));
+    }
+
+    function setAgentGroupCollapsed(groupKey, collapsed) {
+      if (!groupKey) return;
+      state.agentGroupCollapsed[groupKey] = Boolean(collapsed);
+      persistAgentGroupState();
       renderAgents();
     }
 
-    async function loadProjects() {
-      const data = await fetchJson('/api/projects/summary');
-      state.projects = data;
-      renderProjects();
-      renderTaskProjectOptions();
-    }
-
-    function buildTasksUrl() {
-      const params = new URLSearchParams();
-      params.set('include_subtasks', 'true');
-      const { project_id, task_id, status } = state.taskFilters;
-      if (project_id) params.set('project_id', project_id);
-      if (task_id) params.set('task_id', task_id);
-      if (status) params.set('status', status);
-      return `/api/tasks?${params.toString()}`;
-    }
-
-    async function loadTasks() {
-      if (!state.projects) {
-        // Keep project selector in sync when entering tasks first.
-        await loadProjects();
+    function setAgentGroupingMode(mode) {
+      const valid = new Set(['hierarchy', 'role', 'status', 'lifecycle']);
+      state.agentGroupingMode = valid.has(mode) ? mode : 'hierarchy';
+      localStorage.setItem('agentGroupingMode', state.agentGroupingMode);
+      persistUiState({ agentGroupingMode: state.agentGroupingMode });
+      if (refs.agentGroupingMode && refs.agentGroupingMode.value !== state.agentGroupingMode) {
+        refs.agentGroupingMode.value = state.agentGroupingMode;
       }
-      const data = await fetchJson(buildTasksUrl());
-      state.tasks = data;
-      renderTasks();
+      renderAgents();
     }
 
-    async function refreshActiveView() {
-      try {
-        if (state.activeTab === 'agents') await loadAgents();
-        if (state.activeTab === 'projects') await loadProjects();
-        if (state.activeTab === 'tasks') await loadTasks();
-        setConn(true);
-        markRefresh();
-      } catch (err) {
-        console.error(err);
-        setConn(false, `(${err.message || err})`);
+    function renderLaneCards(list = []) {
+      if (!list.length) {
+        return `<article class="card lane-empty-card"><div class="muted">No agents in this category.</div></article>`;
       }
+      return list.map(agentCard).join('');
     }
 
-    const refreshTimers = new Map();
-    function scheduleActiveRefresh(reason = '') {
-      const key = state.activeTab;
-      if (refreshTimers.has(key)) return;
-      const timer = setTimeout(async () => {
-        refreshTimers.delete(key);
-        await refreshActiveView();
-        if (reason) console.debug('sse refresh', key, reason);
-      }, 250);
-      refreshTimers.set(key, timer);
-    }
+    function getHierarchyGroups(liveAgents = []) {
+      const byId = new Map(liveAgents.map((a) => [a.agent_id, a]));
+      const parentToChildren = new Map();
+      const orphans = [];
 
-    function setupSse() {
-      const es = new EventSource('/api/stream');
-
-      es.onopen = () => {
-        setConn(true, '(sse)');
-      };
-
-      es.onerror = () => {
-        setConn(false, '(sse disconnected)');
-      };
-
-      const agentEvents = ['snapshot', 'agent-update', 'agent-registered', 'agent-offline', 'agent-back', 'agent-removed', 'agent-blocked'];
-      const projectEvents = ['projects-snapshot'];
-      const taskEvents = ['task-update', 'subtask-update', 'subtask-assigned'];
-
-      agentEvents.forEach(name => es.addEventListener(name, () => {
-        if (state.activeTab === 'agents') scheduleActiveRefresh(name);
-      }));
-
-      projectEvents.forEach(name => es.addEventListener(name, () => {
-        if (state.activeTab === 'projects') scheduleActiveRefresh(name);
-      }));
-
-      taskEvents.forEach(name => es.addEventListener(name, () => {
-        if (state.activeTab === 'tasks') scheduleActiveRefresh(name);
-      }));
-
-      // Generic PM events stream fallback.
-      es.addEventListener('project-event', () => {
-        if (state.activeTab === 'projects' || state.activeTab === 'tasks') {
-          scheduleActiveRefresh('project-event');
+      for (const agent of liveAgents) {
+        const parentId = agent.parent_agent_id;
+        if (!parentId) continue;
+        if (!byId.has(parentId)) {
+          orphans.push(agent);
+          continue;
         }
+        const arr = parentToChildren.get(parentId) || [];
+        arr.push(agent);
+        parentToChildren.set(parentId, arr);
+      }
+
+      const roots = liveAgents
+        .filter((a) => !a.parent_agent_id || !byId.has(a.parent_agent_id))
+        .filter((a) => !orphans.includes(a))
+        .sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+
+      const visited = new Set();
+      function collectBranch(root) {
+        const ordered = [];
+        const stack = [{ node: root, depth: 0 }];
+        while (stack.length) {
+          const { node, depth } = stack.pop();
+          if (!node || visited.has(node.agent_id)) continue;
+          visited.add(node.agent_id);
+          ordered.push({ ...node, _hierarchy_depth: depth });
+          const kids = (parentToChildren.get(node.agent_id) || []).sort((a,b) => a.agent_id.localeCompare(b.agent_id));
+          for (let i = kids.length - 1; i >= 0; i -= 1) stack.push({ node: kids[i], depth: depth + 1 });
+        }
+        return ordered;
+      }
+
+      const groups = roots.map((root) => {
+        const branch = collectBranch(root);
+        return {
+          key: `hier-root-${root.agent_id}`,
+          title: `🌳 Root ${root.agent_id}`,
+          note: `${branch.length} agents`,
+          agents: branch,
+          tone: 'normal',
+        };
       });
 
-      return es;
+      if (orphans.length) {
+        groups.unshift({
+          key: 'hier-orphans',
+          title: '🧩 Orphaned agents (missing parent)',
+          note: 'Check parent_agent_id mapping',
+          agents: orphans.sort((a,b) => a.agent_id.localeCompare(b.agent_id)).map((a) => ({ ...a, _hierarchy_depth: 0 })),
+          tone: 'alert',
+        });
+      }
+
+      const blocked = liveAgents.filter((a) => ['blocked', 'error'].includes(agentStatus(a))).sort((a,b) => a.agent_id.localeCompare(b.agent_id));
+      if (blocked.length) {
+        groups.unshift({
+          key: 'hier-blocked',
+          title: '⚠ Blocked / Error',
+          note: 'High attention',
+          agents: blocked.map((a) => ({ ...a, _hierarchy_depth: 0 })),
+          tone: 'alert',
+        });
+      }
+
+      return groups;
+    }
+
+    function getRoleGroups(liveAgents = []) {
+      const byRole = new Map();
+      for (const agent of liveAgents) {
+        const role = agent.role || 'unknown';
+        const arr = byRole.get(role) || [];
+        arr.push(agent);
+        byRole.set(role, arr);
+      }
+      return [...byRole.entries()]
+        .sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([role, agents]) => ({
+          key: `role-${role}`,
+          title: `🧭 Role: ${role}`,
+          note: `${agents.length} agents`,
+          agents: agents.sort((x,y) => x.agent_id.localeCompare(y.agent_id)),
+          tone: role.includes('coordinator') ? 'normal' : 'normal',
+        }));
+    }
+
+    function getStatusGroups(liveAgents = []) {
+      const byStatus = new Map();
+      for (const agent of liveAgents) {
+        const status = agentStatus(agent);
+        const arr = byStatus.get(status) || [];
+        arr.push(agent);
+        byStatus.set(status, arr);
+      }
+      return [...byStatus.entries()]
+        .sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([status, agents]) => ({
+          key: `status-${status}`,
+          title: `📶 Status: ${status}`,
+          note: `${agents.length} agents`,
+          agents: agents.sort((x,y) => x.agent_id.localeCompare(y.agent_id)),
+          tone: (status === 'blocked' || status === 'error') ? 'alert' : 'normal',
+        }));
+    }
+
+    function getLifecycleGroups(liveAgents = []) {
+      const coordinators = liveAgents.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const workers = liveAgents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator');
+      const activeWorkers = workers.filter(a => WORKER_BUSY.has(a.fabric_status) || a.fabric_status === 'error' || a.fabric_status === 'blocked');
+      const idleWorkers = workers.filter(a => !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'error' && a.fabric_status !== 'blocked');
+      return [
+        { key: 'life-coordinators', title: '👑 Coordinators', note: `${coordinators.length} agents`, agents: coordinators, tone: 'normal' },
+        { key: 'life-running', title: '⚡ Running / Hot', note: `${activeWorkers.length} agents`, agents: activeWorkers, tone: 'normal' },
+        { key: 'life-idle', title: '💤 Idle', note: `${idleWorkers.length} agents`, agents: idleWorkers, tone: 'normal' },
+      ];
+    }
+
+    function getGroupedSections(liveAgents = []) {
+      if (state.agentGroupingMode === 'role') return getRoleGroups(liveAgents);
+      if (state.agentGroupingMode === 'status') return getStatusGroups(liveAgents);
+      if (state.agentGroupingMode === 'lifecycle') return getLifecycleGroups(liveAgents);
+      return getHierarchyGroups(liveAgents);
     }
 
     function renderAgents() {
-      const payload = state.agents;
-      if (!payload || !Array.isArray(payload.items)) {
-        el.agentsTableWrap.innerHTML = '<div class="empty">Sin datos.</div>';
-        return;
-      }
+      ensureAcpSelection();
+      const q = state.agentSearchQuery;
+      const all = [...state.agents.values()].filter(a => matchesAgentSearch(a, q))
+        .sort((a,b) => a.agent_id.localeCompare(b.agent_id));
 
-      const inv = payload.invariants || { secretary_under_subcoordinator_ok: true, violations: [] };
-      if (inv.secretary_under_subcoordinator_ok) {
-        el.agentsInvariant.innerHTML = '<div class="ok">Invariante OK: secretary está bajo sub-coordinator.</div>';
-      } else {
-        const rows = (inv.violations || []).map(v => `<li class="mono">${v.agent_id}: ${v.reason} (parent=${v.parent_agent_id || 'null'})</li>`).join('');
-        el.agentsInvariant.innerHTML = `<div class="warning"><b>Violaciones de jerarquía</b><ul>${rows}</ul></div>`;
-      }
+      const dead = all.filter(a => !a.process_alive || a.fabric_status === 'offline' || a.fabric_status === 'shutting_down');
+      const live = all.filter(a => !dead.includes(a));
+      const coordinators = live.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const processing = live.filter(a => WORKER_BUSY.has(a.fabric_status)).length;
+      const blocked = live.filter(a => ['blocked', 'error'].includes(agentStatus(a))).length;
 
-      const rows = payload.items
-        .sort((a, b) => String(a.role).localeCompare(String(b.role)) || String(a.agent_id).localeCompare(String(b.agent_id)))
-        .map(a => `
-          <tr>
-            <td class="mono">${a.agent_id}</td>
-            <td>${a.role}</td>
-            <td>${statusBadge(a.fabric_status || a.status)}</td>
-            <td class="mono">${a.current_task || '-'}</td>
-            <td class="mono">${a.parent_agent_id || '-'}</td>
-            <td>${a.children_count ?? 0}</td>
-            <td class="muted">${a.last_seen_at || '-'}</td>
-          </tr>
-        `)
-        .join('');
-
-      el.agentsTableWrap.innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>agent_id</th>
-              <th>role</th>
-              <th>status</th>
-              <th>current_task</th>
-              <th>parent_agent_id</th>
-              <th>children</th>
-              <th>last_seen_at</th>
-            </tr>
-          </thead>
-          <tbody>${rows || '<tr><td colspan="7" class="empty">Sin agentes</td></tr>'}</tbody>
-        </table>
+      refs.agentStatsBar.innerHTML = `
+        <span class="stat">Total: <b>${all.length}</b></span>
+        <span class="stat">Live: <b>${live.length}</b></span>
+        <span class="stat">Processing: <b>${processing}</b></span>
+        <span class="stat">Blocked/Error: <b>${blocked}</b></span>
+        <span class="stat">Coordinators: <b>${coordinators.length}</b></span>
+        <span class="stat">Offline/History: <b>${dead.length}</b></span>
       `;
+
+      const groups = getGroupedSections(live);
+      refs.agentGroupedSections.innerHTML = groups.map((group) => {
+        const collapsed = Boolean(state.agentGroupCollapsed[group.key]);
+        return `<div class="agent-section agent-category-panel ${group.tone === 'alert' ? 'alert' : ''} ${collapsed ? 'collapsed' : ''}" data-group-key="${escapeHtml(group.key)}">
+          <button class="agent-category-header" data-action="toggle-agent-group" data-group-key="${escapeHtml(group.key)}" aria-expanded="${String(!collapsed)}">
+            <span class="agent-category-toggle-icon">▶</span>
+            <span class="agent-category-title">${escapeHtml(group.title)}</span>
+            <span class="agent-group-note">${escapeHtml(group.note || '')}</span>
+            <span class="muted">(${group.agents.length})</span>
+          </button>
+          <div class="agent-category-body">
+            <div class="agent-lane">${renderLaneCards(group.agents)}</div>
+          </div>
+        </div>`;
+      }).join('') || `<div class="agent-section"><div class="agent-category-body"><div class="agent-lane"><article class="card lane-empty-card"><div class="muted">No live agents for this filter.</div></article></div></div></div>`;
+
+      refs.historyCount.textContent = `(${dead.length})`;
+      if (!dead.length) {
+        refs.historyAgentsGrid.innerHTML = `<div class="card" style="opacity:.55;"><div class="muted">Sin agentes en history.</div></div>`;
+      } else {
+        refs.historyAgentsGrid.innerHTML = dead.map(agentCard).join('');
+      }
+
+      renderAcpWorkspace();
     }
 
     function renderProjects() {
-      const items = state.projects?.items;
-      if (!Array.isArray(items)) {
-        el.projectsTableWrap.innerHTML = '<div class="empty">Sin datos.</div>';
+      let projects = [...state.projects.values()].sort((a,b) => (a.id - b.id));
+      // Filter active only
+      const totalProjects = projects.length;
+      projects = projects.filter(shouldShowProject);
+      if (!projects.length) {
+        refs.projectsGrid.innerHTML = totalProjects > 0 && state.showOnlyActive
+          ? `<div class="card"><div class="muted">No hay proyectos activos. ${totalProjects - projects.length} proyectos archivados ocultos.</div></div>`
+          : `<div class="card"><div class="muted">No hay proyectos.</div></div>`;
         return;
       }
+      refs.projectsGrid.innerHTML = projects.map(p => {
+        const tasks = [...state.tasks.values()].filter(t => Number(t.project_id) === Number(p.id));
+        const done = tasks.filter(t => ['done','pr_merged','validated','archived'].includes(t.status)).length;
+        const total = p.total_tasks ?? tasks.length;
+        const pct = total ? Math.round((done / total) * 100) : 0;
+        const counts = p.task_counts || {};
+        const activeTasks = tasks.filter(t => ['in_progress','ready_for_validation','ready_for_pr','pr_open','blocked'].includes(t.status)).slice(0,4);
 
-      const rows = items.map(p => `
-        <tr>
-          <td>${p.project_id}</td>
-          <td class="mono">${p.code || '-'}</td>
-          <td>${p.name || '-'}</td>
-          <td>${p.task_counts?.draft ?? 0}</td>
-          <td>${p.task_counts?.in_progress ?? 0}</td>
-          <td>${p.task_counts?.completed ?? 0}</td>
-          <td>${p.task_counts?.failed ?? 0}</td>
-          <td>${p.subtask_count ?? 0}</td>
-        </tr>
-      `).join('');
+        return `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">${escapeHtml(p.code || `p${p.id}`)} — ${escapeHtml(p.name || `Project ${p.id}`)}</h3>
+              <div class="muted">ID ${escapeHtml(p.id)}${state.showOnlyActive ? ` · <span style="color:var(--yellow)">filtrado</span>` : ''}</div>
+            </div>
+            ${projectStatusBadge(p.status || 'planned')}
+          </div>
 
-      el.projectsTableWrap.innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>project_id</th>
-              <th>code</th>
-              <th>name</th>
-              <th>draft</th>
-              <th>in_progress</th>
-              <th>completed</th>
-              <th>failed</th>
-              <th>subtasks</th>
-            </tr>
-          </thead>
-          <tbody>${rows || '<tr><td colspan="8" class="empty">Sin proyectos</td></tr>'}</tbody>
-        </table>
-      `;
-    }
+          ${state.showOnlyActive ? `<div class="muted" style="font-size:11px;margin-bottom:4px;">${totalProjects - projects.length} proyecto(s) ocultos por filtro</div>` : ''}
+          <div class="pill-row">
+            <span class="pill">Total: ${escapeHtml(total)}</span>
+            ${Object.entries(counts).map(([k,v]) => `<span class="pill">${escapeHtml(k)}: ${escapeHtml(v)}</span>`).join('')}
+          </div>
 
-    function renderTaskProjectOptions() {
-      const items = state.projects?.items;
-      if (!Array.isArray(items)) return;
-      const current = state.taskFilters.project_id || '';
-      const options = ['<option value="">Todos</option>']
-        .concat(items.map(p => `<option value="${p.project_id}">#${p.project_id} ${p.name || '(sin nombre)'}</option>`))
-        .join('');
-      el.filterProject.innerHTML = options;
-      el.filterProject.value = current;
+          <div class="muted">Progress ${done}/${total} (${pct}%)</div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+
+          <div>
+            <div class="section-title">Tasks activas</div>
+            ${activeTasks.length ? activeTasks.map(t => `
+              <div class="muted">
+                • <a href="#" data-action="open-task" data-task-id="${escapeHtml(t.id)}">${escapeHtml(t.title || `Task #${t.id}`)}</a>
+                ${taskStatusBadge(t.status)}
+                ${(t.agent_ids||[]).map(id => {
+                  const ag = state.agents.get(id);
+                  const alive = ag?.process_alive;
+                  const color = alive ? 'var(--green)' : 'var(--red)';
+                  return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(id)}</span>`;
+                }).join('')}
+              </div>
+            `).join('') : `<div class="muted">Sin tasks activas</div>`}
+          </div>
+
+          <div class="actions">
+            <button class="btn" data-action="view-project" data-project-id="${escapeHtml(p.id)}">View</button>
+          </div>
+        </article>`;
+      }).join('');
     }
 
     function renderTasks() {
-      const items = state.tasks?.items;
-      if (!Array.isArray(items)) {
-        el.tasksWrap.innerHTML = '<div class="empty">Sin datos.</div>';
+      const projectId = refs.projectFilter.value ? Number(refs.projectFilter.value) : null;
+      let tasks = [...state.tasks.values()];
+      if (projectId != null) tasks = tasks.filter(t => Number(t.project_id) === projectId);
+      // Filter by active projects
+      const totalTasks = tasks.length;
+      tasks = tasks.filter(shouldShowTask);
+
+      if (!tasks.length) {
+        refs.kanbanBoard.innerHTML = `<div class="card"><div class="muted">No hay tasks para el filtro actual.</div></div>`;
         return;
       }
 
-      const f = state.tasks?.filters || {};
-      const filterLine = `<div class="muted" style="margin:0 0 8px;">Filtros activos: project_id=${f.project_id || '-'} task_id=${f.task_id || '-'} status=${f.status || '-'}</div>`;
-
-      if (items.length === 0) {
-        el.tasksWrap.innerHTML = `${filterLine}<div class="empty">No hay tareas para esos filtros.</div>`;
-        return;
-      }
-
-      el.tasksWrap.innerHTML = filterLine + items.map(task => {
-        const subtasks = Array.isArray(task.subtasks) ? task.subtasks : [];
-        const subtasksHtml = subtasks.length
-          ? subtasks.map(sub => `
-              <div class="subtask">
-                <div><b>#${sub.id}</b> ${sub.title || '(sin título)'} • <span class="muted">status=${sub.status}</span></div>
-                <div class="muted">worker=${sub.worker_agent_id || '-'} qa=${sub.qa_agent_id || '-'}</div>
-                <div class="muted">depends_on=${(sub.depends_on || []).join(',') || '-'}</div>
-                <div>${(sub.assignment_types || []).map(a => `<span class="pill">${a}</span>`).join('') || '<span class="muted">sin assignment_types</span>'}</div>
-              </div>
-            `).join('')
-          : '<div class="empty">Sin subtareas</div>';
+      const statuses = [...new Set(tasks.map(t => t.status || 'planned'))];
+      refs.kanbanBoard.innerHTML = statuses.map(st => {
+        const colTasks = tasks.filter(t => (t.status || 'planned') === st)
+          .sort((a,b) => (a.sequence_order ?? 99999) - (b.sequence_order ?? 99999));
 
         return `
-          <div class="task-box">
-            <div class="task-head">
-              <div>
-                <div class="task-title">#${task.id} ${task.title || '(sin título)'}</div>
-                <div class="muted mono">project=${task.project_id} owner=${task.owner_agent_id || '-'} status=${task.status}</div>
-              </div>
-              <div class="muted">subtasks: ${subtasks.length}</div>
+          <section class="column">
+            <div class="column-header">${escapeHtml(st)} <span class="muted">${colTasks.length}</span></div>
+            <div class="column-body">
+              ${colTasks.map(t => `
+                <article class="task-card" data-action="open-task" data-task-id="${escapeHtml(t.id)}">
+                  <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+                    <strong>${escapeHtml(t.title || `Task #${t.id}`)}</strong>
+                    ${taskStatusBadge(t.status)}
+                  </div>
+                  <div class="muted">#${escapeHtml(t.id)} ${escapeHtml(t.project_code || '')}</div>
+                  <div class="chip-row" style="margin-top:6px;">
+                    ${(t.agent_ids || []).map(id => {
+                      const ag = state.agents.get(id);
+                      const alive = ag?.process_alive;
+                      const color = alive ? 'var(--green)' : 'var(--red)';
+                      return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(id)}${ag?.role ? ` · ${escapeHtml(ag.role)}` : ''}</span>`;
+                    }).join('')}
+                  </div>
+                </article>
+              `).join('')}
             </div>
-            <div class="subtasks">${subtasksHtml}</div>
-          </div>
+          </section>
         `;
       }).join('');
     }
 
-    function switchTab(tab) {
-      state.activeTab = tab;
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
+    function renderTimeline() {
+      const showAgents = refs.tfAgents.checked;
+      const showProjects = refs.tfProjects.checked;
+      const showErrors = refs.tfErrors.checked;
+      const showPRs = refs.tfPRs.checked;
+
+      const items = state.allEvents.slice(-300).filter(e => {
+        if (!showErrors && e.isError) return false;
+        if (!showPRs && e.isPR) return false;
+        if (!showAgents && e.source === 'agent') return false;
+        if (!showProjects && e.source === 'project') return false;
+        return true;
       });
-      document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
-      document.getElementById(`view-${tab}`).classList.add('active');
-      refreshActiveView();
+
+      refs.timelineList.innerHTML = items.map(e => {
+        const icon = e.source === 'agent' ? '🤖' : (e.source === 'project' ? '📋' : '🛰️');
+        return `<li class="timeline-item"><span class="event-time">${fmtDate(e.ts)}</span>${icon} <b>${escapeHtml(e.kind)}</b> — ${escapeHtml(e.message)}</li>`;
+      }).join('');
+
+      refs.timelineList.scrollTop = refs.timelineList.scrollHeight;
     }
 
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    function renderEventLog() {
+      refs.eventLogList.innerHTML = state.logEvents.slice(-250).map(e => `
+        <li class="event-item">
+          <span class="event-time">${fmtDate(e.ts)}</span>
+          <b>${escapeHtml(e.kind)}</b> — ${escapeHtml(e.message)}
+        </li>
+      `).join('');
+      const logBody = document.getElementById('logBody');
+      logBody.scrollTop = logBody.scrollHeight;
+    }
+
+    function toEpochMs(value) {
+      if (value == null || value === '') return 0;
+      if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+      const ms = Date.parse(String(value));
+      return Number.isFinite(ms) ? ms : 0;
+    }
+
+    function fmtDuration(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+
+    function collectBlockersAndStaleSignals() {
+      const now = Date.now();
+      const alerts = [];
+      const thresholds = state.staleThresholds;
+
+      for (const agent of state.agents.values()) {
+        const status = agentStatus(agent);
+        const lastSeenMs = toEpochMs(agent.last_seen_at);
+        const sinceSeen = lastSeenMs ? (now - lastSeenMs) : 0;
+        if (status === 'blocked' || status === 'error') {
+          alerts.push({
+            key: `agent:${agent.agent_id}:${status}`,
+            severity: 'high',
+            type: 'agent',
+            label: `${agent.agent_id} ${status}`,
+            detail: `status=${status} last_seen=${agent.last_seen_at || '--'}`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        } else if ((status === 'waiting_response' || status === 'waiting_llm') && sinceSeen > thresholds.waitingMs) {
+          alerts.push({
+            key: `agent:${agent.agent_id}:waiting`,
+            severity: 'medium',
+            type: 'agent',
+            label: `${agent.agent_id} waiting too long`,
+            detail: `waiting for ${fmtDuration(sinceSeen)} (${status})`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        } else if (agent.process_alive && status !== 'offline' && sinceSeen > thresholds.agentIdleMs) {
+          alerts.push({
+            key: `agent:${agent.agent_id}:stale`,
+            severity: 'medium',
+            type: 'agent',
+            label: `${agent.agent_id} stale heartbeat`,
+            detail: `no heartbeat for ${fmtDuration(sinceSeen)}`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        }
+      }
+
+      for (const task of state.tasks.values()) {
+        const taskStatus = String(task.status || 'planned');
+        const updatedMs = toEpochMs(task.updated_at || task.modified_at || task.last_transition_at || task.created_at);
+        const age = updatedMs ? now - updatedMs : 0;
+        if (taskStatus === 'blocked') {
+          alerts.push({
+            key: `task:${task.id}:blocked`,
+            severity: 'high',
+            type: 'task',
+            label: `Task #${task.id} blocked`,
+            detail: `${task.title || 'untitled'} · updated ${task.updated_at || '--'}`,
+            action: { type: 'task', task_id: task.id, project_id: task.project_id },
+          });
+        } else if (['in_progress', 'ready_for_validation', 'ready_for_pr', 'pr_open'].includes(taskStatus) && age > thresholds.taskMs) {
+          alerts.push({
+            key: `task:${task.id}:stale-progress`,
+            severity: 'medium',
+            type: 'task',
+            label: `Task #${task.id} stale-progress`,
+            detail: `${task.title || 'untitled'} · no progress for ${fmtDuration(age)}`,
+            action: { type: 'task', task_id: task.id, project_id: task.project_id },
+          });
+        }
+      }
+
+      for (const subtask of state.subtasks.values()) {
+        const subtaskStatus = String(subtask.status || 'pending');
+        const updatedMs = toEpochMs(subtask.updated_at || subtask.modified_at || subtask.last_transition_at || subtask.created_at);
+        const age = updatedMs ? now - updatedMs : 0;
+        const parentTask = state.tasks.get(Number(subtask.task_id));
+        const projectId = parentTask?.project_id;
+        if (subtaskStatus === 'blocked') {
+          alerts.push({
+            key: `subtask:${subtask.id}:blocked`,
+            severity: 'high',
+            type: 'subtask',
+            label: `Subtask #${subtask.id} blocked`,
+            detail: `${subtask.title || subtask.text || 'subtask'} · task #${subtask.task_id || '--'}`,
+            action: { type: 'subtask', subtask_id: subtask.id, task_id: subtask.task_id, project_id: projectId },
+          });
+        } else if (['running', 'in_progress', 'assigned'].includes(subtaskStatus) && age > thresholds.subtaskMs) {
+          alerts.push({
+            key: `subtask:${subtask.id}:stale-progress`,
+            severity: 'medium',
+            type: 'subtask',
+            label: `Subtask #${subtask.id} stale-progress`,
+            detail: `no update for ${fmtDuration(age)} · task #${subtask.task_id || '--'}`,
+            action: { type: 'subtask', subtask_id: subtask.id, task_id: subtask.task_id, project_id: projectId },
+          });
+        }
+      }
+
+      const unique = new Map();
+      for (const alert of alerts) if (!unique.has(alert.key)) unique.set(alert.key, alert);
+      state.blockers = [...unique.values()].sort((a, b) => {
+        if (a.severity === b.severity) return String(a.label).localeCompare(String(b.label));
+        return a.severity === 'high' ? -1 : 1;
+      });
+    }
+
+    function renderBlockerPanel() {
+      if (!refs.blockerPanel) return;
+      collectBlockersAndStaleSignals(); // stale-progress detection logic
+      const alerts = state.blockers;
+      if (!alerts.length) {
+        refs.blockerPanel.classList.add('clear');
+        refs.blockerPanel.innerHTML = `<div><strong>✅ Blockers / stale signals</strong> <span class="muted">none detected</span></div>`;
+        return;
+      }
+      refs.blockerPanel.classList.remove('clear');
+      refs.blockerPanel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <strong>⚠ Blocker / stale work panel</strong>
+          <span class="chip">${alerts.length} alerts</span>
+        </div>
+        <ul class="blocker-list">
+          ${alerts.slice(0, 40).map((alert) => `
+            <li class="blocker-item sev-${alert.severity}">
+              <strong>${escapeHtml(alert.label)}</strong>
+              <span class="muted">${escapeHtml(alert.detail || '')}</span>
+              ${alert.action?.type === 'task' ? ` · <a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(alert.action.task_id)}" data-project-id="${escapeHtml(alert.action.project_id || '')}">open task</a>` : ''}
+              ${alert.action?.type === 'subtask' ? ` · <a href="#" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(alert.action.subtask_id)}" data-task-id="${escapeHtml(alert.action.task_id || '')}" data-project-id="${escapeHtml(alert.action.project_id || '')}">open subtask</a>` : ''}
+              ${alert.action?.type === 'agent' ? ` · <a href="#" data-action="select-acp-agent" data-agent-id="${escapeHtml(alert.action.agent_id)}">open agent</a>` : ''}
+            </li>`).join('')}
+        </ul>
+      `;
+    }
+
+    function operationsLaneBuckets() {
+      const agents = [...state.agents.values()];
+      const coordinators = agents.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const running = agents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator' && WORKER_BUSY.has(a.fabric_status));
+      const idle = agents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator' && !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'offline' && a.fabric_status !== 'shutting_down');
+      const offline = agents.filter(a => a.fabric_status === 'offline' || a.fabric_status === 'shutting_down' || !a.process_alive);
+      return { coordinators, running, idle, offline };
+    }
+
+    function getTaskOwnership(task = {}) {
+      const coordinator = task.coordinator_agent_id || task.coordinator_id || task.coordinator_agent || task.owner_agent_id || '--';
+      const orchestrator = task.orchestrator_agent_id || task.sub_coordinator_agent_id || task.subcoordinator_agent_id || task.sub_coordinator_id || task.orchestrator_id || '--';
+      return { coordinator, orchestrator };
+    }
+
+    function normalizeAgentIdList(values = []) {
+      return [...new Set((values || []).map((v) => String(v || '').trim()).filter((v) => v && v !== '--' && v.toLowerCase() !== 'null' && v.toLowerCase() !== 'undefined'))];
+    }
+
+    function renderAgentJumpLink(agentId) {
+      const id = String(agentId || '').trim();
+      if (!id || id === '--') return '--';
+      const isKnown = state.agents.has(id);
+      return `<a href="#" class="ops-link" data-action="select-acp-agent" data-agent-id="${escapeHtml(id)}" title="Open ${escapeHtml(id)} in Agent panel">${escapeHtml(id)}${isKnown ? '' : ' (?)'}</a>`;
+    }
+
+    function renderAgentJumpLinks(agentIds = []) {
+      const ids = normalizeAgentIdList(agentIds);
+      if (!ids.length) return '--';
+      return ids.map((id) => renderAgentJumpLink(id)).join(', ');
+    }
+
+    function getSubtaskAssignees(subtask = {}, task = {}) {
+      const fromSubtask = Array.isArray(subtask.assigned_agents)
+        ? subtask.assigned_agents
+        : Array.isArray(subtask.agent_ids)
+          ? subtask.agent_ids
+          : [subtask.worker_agent_id, subtask.assigned_agent_id, subtask.agent_id].filter(Boolean);
+      if (fromSubtask.length) return fromSubtask;
+      if (Array.isArray(task.agent_ids) && task.agent_ids.length) return task.agent_ids;
+      return [];
+    }
+
+    function getTaskSubtasksNormalized(task = {}) {
+      const inline = Array.isArray(task.subtasks) ? task.subtasks : [];
+      if (inline.length) return inline.map(st => normalizeSubtaskEntity(st, task.id)).filter(Boolean);
+      return materializeTaskSubtasks(task.id);
+    }
+
+    function normalizeIdList(raw) {
+      const arr = Array.isArray(raw) ? raw : (raw != null ? [raw] : []);
+      return arr
+        .map((item) => (typeof item === 'object' ? (item.id ?? item.task_id ?? item.taskId) : item))
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id));
+    }
+
+    function getTaskDependencies(task = {}) {
+      return normalizeIdList(
+        task.dependencies
+        ?? task.depends_on
+        ?? task.depends_on_task_ids
+        ?? task.blocked_by
+        ?? task.blocked_by_task_ids
+      );
+    }
+
+    function getTaskDependents(task = {}) {
+      return normalizeIdList(task.blocking ?? task.blocking_task_ids ?? task.unblocks ?? task.dependents);
+    }
+
+    function getTaskInfraMetadata(task = {}) {
+      return {
+        branch: task.branch || task.git_branch || task.base_branch || '--',
+        worktree: task.worktree_path || task.repo_local_path || task.workspace_path || '--',
+        tmuxSession: task.tmux_session || task.session || task.tmux || '--',
+        pr: task.pr_number ? `#${task.pr_number}` : (task.pr_url || '--'),
+      };
+    }
+
+    function getSubtaskAttempts(subtask = {}) {
+      const value = subtask.attempt_count
+        ?? subtask.attempts
+        ?? subtask.retry_count
+        ?? subtask.retries
+        ?? subtask.run_attempts;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function extractLastError(entity = {}) {
+      const raw = entity.last_error ?? entity.error ?? entity.lastError ?? entity.failure_reason;
+      if (!raw) return '';
+      if (typeof raw === 'string') return raw;
+      if (typeof raw === 'object') {
+        return raw.message || raw.error || raw.reason || JSON.stringify(raw);
+      }
+      return String(raw);
+    }
+
+    function getTaskAgentIds(task = {}, subtasks = []) {
+      const fromTask = Array.isArray(task.agent_ids) ? task.agent_ids : [];
+      const fromSubtasks = subtasks.flatMap((s) => getSubtaskAssignees(s, task));
+      return [...new Set([...fromTask, ...fromSubtasks].filter(Boolean))];
+    }
+
+    function renderAgentQuickActions(agentIds = []) {
+      if (!agentIds.length) return '<span class="muted">No assigned agents.</span>';
+      return agentIds.map((id) => `
+        <button class="btn" data-action="select-acp-agent" data-agent-id="${escapeHtml(id)}">Open ${escapeHtml(id)}</button>
+        <button class="btn" data-action="view-log" data-agent-id="${escapeHtml(id)}">Log ${escapeHtml(id)}</button>
+      `).join('');
+    }
+
+    function renderTaskLinkList(taskIds = [], projectId = null) {
+      if (!taskIds.length) return '--';
+      return taskIds.map((id) => `<a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(id)}" data-project-id="${escapeHtml(projectId ?? '')}">#${escapeHtml(id)}</a>`).join(', ');
+    }
+
+    function ensureOperationsSelection(projects = []) {
+      const sel = state.operationsSelection || {};
+      const validProject = sel.projectId != null && state.projects.has(Number(sel.projectId));
+      if (sel.type === 'project' && validProject) return;
+      if (sel.type === 'task' && sel.taskId != null && state.tasks.has(Number(sel.taskId))) return;
+      if (sel.type === 'subtask' && sel.subtaskId != null && state.subtasks.has(Number(sel.subtaskId))) return;
+
+      const firstProject = projects[0];
+      if (firstProject) {
+        state.operationsSelection = { type: 'project', projectId: firstProject.id, taskId: null, subtaskId: null };
+        if (state.operationsExpandedProjects[firstProject.id] == null) state.operationsExpandedProjects[firstProject.id] = true;
+      } else {
+        state.operationsSelection = { type: 'project', projectId: null, taskId: null, subtaskId: null };
+      }
+      persistUiState({
+        operationsSelection: state.operationsSelection,
+        operationsExpandedProjects: state.operationsExpandedProjects,
+      });
+    }
+
+    function renderOperationsTree(projects = []) {
+      const selected = state.operationsSelection || {};
+      refs.opsNavList.innerHTML = projects.map((project) => {
+        const taskIds = state.projectTasks.get(Number(project.id)) || [];
+        const tasks = taskIds
+          .map((taskId) => state.tasks.get(Number(taskId)))
+          .filter(Boolean)
+          .filter(shouldShowTask)
+          .sort((a,b) => (a.sequence_order ?? 99999) - (b.sequence_order ?? 99999));
+        const expanded = state.operationsExpandedProjects[project.id] !== false;
+        const projectSelected = selected.type === 'project' && Number(selected.projectId) === Number(project.id);
+
+        return `<article class="ops-tree-project">
+          <button class="ops-tree-project-head ${projectSelected ? 'active' : ''}" data-action="select-ops-project" data-project-id="${escapeHtml(project.id)}">
+            <span><strong>${escapeHtml(project.code || `p${project.id}`)}</strong> <span class="muted">${escapeHtml(project.name || '')}</span></span>
+            <span class="muted">${tasks.length} tasks ${expanded ? '▾' : '▸'}</span>
+          </button>
+          ${expanded ? `<div class="ops-tree-body">${tasks.length ? tasks.map((task) => {
+            const ownership = getTaskOwnership(task);
+            const taskSelected = selected.type === 'task' && Number(selected.taskId) === Number(task.id);
+            const subtasks = getTaskSubtasksNormalized(task);
+            return `<div class="ops-tree-task ${taskSelected ? 'active' : ''}">
+              <div class="ops-tree-task-head" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                <span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>
+                ${taskStatusBadge(task.status)}
+              </div>
+              <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}</div>
+              <div class="ops-tree-subtasks">
+                ${subtasks.length ? subtasks.map((subtask) => {
+                  const subtaskSelected = selected.type === 'subtask' && Number(selected.subtaskId) === Number(subtask.id);
+                  const assigned = getSubtaskAssignees(subtask, task);
+                  return `<div class="ops-tree-subtask ${subtaskSelected ? 'active' : ''}" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                    <span>#${escapeHtml(subtask.id)} ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</span>
+                    <span class="muted">${escapeHtml(subtask.status || 'pending')} · ${renderAgentJumpLinks(assigned || [])}</span>
+                  </div>`;
+                }).join('') : '<div class="muted">No subtasks</div>'}
+              </div>
+            </div>`;
+          }).join('') : '<div class="muted">No tasks in project.</div>'}</div>` : ''}
+        </article>`;
+      }).join('') || `<article class="ops-lane-card"><div class="muted">No projects available.</div></article>`;
+    }
+
+    function renderOperationsDetail() {
+      const sel = state.operationsSelection || {};
+      if (sel.type === 'task' && sel.taskId != null) {
+        const task = state.tasks.get(Number(sel.taskId));
+        if (!task) {
+          refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Task not found.</div></article>`;
+          return;
+        }
+        const project = state.projects.get(Number(task.project_id));
+        const ownership = getTaskOwnership(task);
+        const subtasks = getTaskSubtasksNormalized(task);
+        const infra = getTaskInfraMetadata(task);
+        const dependencies = getTaskDependencies(task);
+        const dependents = getTaskDependents(task);
+        const taskAgents = getTaskAgentIds(task, subtasks);
+        const taskError = extractLastError(task);
+        refs.opsLaneTitle.textContent = `🧩 Task #${task.id} detail`;
+        refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+          <article class="ops-task-detail-panel" data-surface="task-detail-panel">
+            <div class="ops-task-detail-header">
+              <div>
+                <strong>${escapeHtml(task.title || `Task #${task.id}`)}</strong>
+                <div class="muted">${escapeHtml(project?.code || `Project ${task.project_id || '--'}`)} · task #${escapeHtml(task.id)}</div>
+              </div>
+              ${taskStatusBadge(task.status)}
+            </div>
+            <div class="ops-detail-kv">
+              <div><b>Coordinator:</b> ${escapeHtml(ownership.coordinator)}</div>
+              <div><b>Orchestrator/Sub-coordinator:</b> ${escapeHtml(ownership.orchestrator)}</div>
+              <div><b>Branch:</b> ${escapeHtml(infra.branch)}</div>
+              <div><b>Worktree:</b> ${escapeHtml(infra.worktree)}</div>
+              <div><b>tmux session:</b> ${escapeHtml(infra.tmuxSession)}</div>
+              <div><b>PR:</b> ${task.pr_url ? `<a href="${escapeHtml(task.pr_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(infra.pr)}</a>` : escapeHtml(infra.pr)}</div>
+              <div><b>Dependencies:</b> ${renderTaskLinkList(dependencies, task.project_id)}</div>
+              <div><b>Blocking:</b> ${renderTaskLinkList(dependents, task.project_id)}</div>
+            </div>
+            ${taskError ? `<div class="ops-detail-error"><b>Last error:</b> ${escapeHtml(taskError)}</div>` : '<div class="muted">Last error: none</div>'}
+            <div class="ops-detail-actions">
+              <button class="btn" data-action="open-task" data-task-id="${escapeHtml(task.id)}">Open full task modal</button>
+              ${renderAgentQuickActions(taskAgents)}
+            </div>
+          </article>
+
+          <article class="ops-lane-card">
+            <div style="display:flex;justify-content:space-between;gap:8px;"><strong>Subtasks deep detail</strong><span class="muted">${subtasks.length}</span></div>
+            <div class="ops-detail-subtasks" style="margin-top:8px;">
+              ${subtasks.length ? subtasks.map((subtask) => {
+                const assigned = getSubtaskAssignees(subtask, task);
+                const attempts = getSubtaskAttempts(subtask);
+                const subErr = extractLastError(subtask);
+                const deps = normalizeIdList(subtask.dependencies ?? subtask.depends_on ?? subtask.blocked_by);
+                return `<div class="ops-tree-subtask" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}">
+                  <div><strong>#${escapeHtml(subtask.id)}</strong> ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</div>
+                  <div class="muted">state: ${escapeHtml(subtask.status || 'pending')} · assigned: ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'} · attempts: ${attempts != null ? escapeHtml(attempts) : '--'} · deps: ${deps.length ? deps.map((id) => `#${id}`).join(', ') : '--'}</div>
+                  ${subErr ? `<div class="ops-detail-error" style="margin-top:6px;"><b>last error:</b> ${escapeHtml(subErr)}</div>` : ''}
+                </div>`;
+              }).join('') : '<div class="muted">No subtasks.</div>'}
+            </div>
+          </article>
+        </div>`;
+        return;
+      }
+
+      if (sel.type === 'subtask' && sel.subtaskId != null) {
+        const subtask = state.subtasks.get(Number(sel.subtaskId));
+        if (!subtask) {
+          refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Subtask not found.</div></article>`;
+          return;
+        }
+        const task = state.tasks.get(Number(subtask.task_id));
+        const project = task ? state.projects.get(Number(task.project_id)) : null;
+        const assigned = getSubtaskAssignees(subtask, task || {});
+        const attempts = getSubtaskAttempts(subtask);
+        const deps = normalizeIdList(subtask.dependencies ?? subtask.depends_on ?? subtask.blocked_by);
+        const subErr = extractLastError(subtask);
+        refs.opsLaneTitle.textContent = `🧷 Subtask #${subtask.id} detail`;
+        refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+          <article class="ops-task-detail-panel" data-surface="task-detail-panel">
+            <div class="ops-task-detail-header">
+              <strong>${escapeHtml(subtask.title || subtask.text || `Subtask #${subtask.id}`)}</strong>
+              <span class="badge t-${escapeHtml(subtask.status || 'planned')}">${escapeHtml(subtask.status || 'pending')}</span>
+            </div>
+            <div class="ops-detail-kv">
+              <div><b>Assigned agents:</b> ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</div>
+              <div><b>Attempts:</b> ${attempts != null ? escapeHtml(attempts) : '--'}</div>
+              <div><b>Dependencies:</b> ${deps.length ? deps.map((id) => `#${escapeHtml(id)}`).join(', ') : '--'}</div>
+              <div><b>Last heartbeat:</b> ${escapeHtml(subtask.updated_at || subtask.modified_at || '--')}</div>
+              <div><b>Task:</b> ${task ? `<a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}">#${escapeHtml(task.id)} ${escapeHtml(task.title || '')}</a>` : '--'}</div>
+              <div><b>Project:</b> ${project ? `<a href="#" data-action="select-ops-project" data-project-id="${escapeHtml(project.id)}">${escapeHtml(project.code || `p${project.id}`)}</a>` : '--'}</div>
+            </div>
+            ${subErr ? `<div class="ops-detail-error"><b>Last error:</b> ${escapeHtml(subErr)}</div>` : '<div class="muted">Last error: none</div>'}
+            <div class="ops-detail-actions">${renderAgentQuickActions(assigned)}</div>
+          </article>
+        </div>`;
+        return;
+      }
+
+      const project = state.projects.get(Number(sel.projectId));
+      if (!project) {
+        refs.opsLaneTitle.textContent = '🛰️ Operations detail';
+        refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Select a project or task from the left tree.</div></article>`;
+        return;
+      }
+      const taskIds = state.projectTasks.get(Number(project.id)) || [];
+      const tasks = taskIds.map((id) => state.tasks.get(Number(id))).filter(Boolean).filter(shouldShowTask);
+      refs.opsLaneTitle.textContent = `📁 ${project.code || `p${project.id}`} detail`;
+      refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+        <article class="ops-lane-card">
+          <strong>${escapeHtml(project.name || `Project ${project.id}`)}</strong>
+          <div class="muted" style="margin-top:4px;">project #${escapeHtml(project.id)} · status ${escapeHtml(project.status || 'planned')}</div>
+          <div class="chip-row" style="margin-top:8px;"><span class="chip">Tasks: ${tasks.length}</span><span class="chip">Repo: ${escapeHtml(project.repo_local_path || project.repo_url || '--')}</span></div>
+        </article>
+        <article class="ops-lane-card">
+          <strong>Tasks</strong>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            ${tasks.length ? tasks.map((task) => {
+              const ownership = getTaskOwnership(task);
+              const subtasks = getTaskSubtasksNormalized(task);
+              return `<div class="ops-tree-task" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                <div class="ops-tree-task-head"><span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>${taskStatusBadge(task.status)}</div>
+                <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}</div>
+                <div class="muted">subtasks: ${subtasks.length}</div>
+              </div>`;
+            }).join('') : '<div class="muted">No tasks in current project.</div>'}
+          </div>
+        </article>
+      </div>`;
+    }
+
+
+    function renderOperationsRail() {
+      if (!refs.opsRailBody || !refs.opsRailAgent) return;
+      const agentId = ensureAcpSelection();
+      const agent = agentId ? state.agents.get(agentId) : null;
+      refs.opsRailAgent.textContent = agent ? agent.agent_id : 'No agent selected';
+
+      if (!agent) {
+        refs.opsRailBody.innerHTML = `<p class="muted">Select an agent to view recent outputs, send a message, or open mailbox log.</p>`;
+        return;
+      }
+
+      const outputs = getAcpOutputs(agent.agent_id).slice(-20).map((m) => ({ ...m, source: 'agent' }));
+      const human = (state.acpHumanMessages.get(agent.agent_id) || []).slice(-20).map((m) => ({ ...m, source: 'human' }));
+      const messages = human.concat(outputs).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(-30);
+      const offline = !agent.process_alive || ['offline','shutting_down'].includes(agentStatus(agent));
+      const contextHtml = renderAgentContext(agent) || `<span>${escapeHtml(agent.pm_task_title || (typeof agent.current_task === 'object' ? agent.current_task?.title : agent.current_task) || 'No active task context')}</span>`;
+
+      refs.opsRailBody.innerHTML = `
+        <div class="ops-agent-rail">
+          <div class="ops-agent-header">
+            <strong>${escapeHtml(agent.agent_id)}</strong>
+            <div class="muted">${escapeHtml(agent.role || '--')} · ${escapeHtml(agentStatus(agent))}</div>
+            <div class="muted">${contextHtml}</div>
+            <div class="ops-agent-actions">
+              <button class="btn" data-action="ping-selected-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Ping</button>
+              <button class="btn" data-action="open-selected-agent-log" data-agent-id="${escapeHtml(agent.agent_id)}">Open log/mailbox</button>
+              <button class="btn" data-action="refresh-acp">Refresh</button>
+            </div>
+          </div>
+          <div class="ops-agent-messages" id="opsRailMessages">
+            ${messages.length ? messages.map((m) => {
+              const cls = m.source === 'human' ? 'human' : `agent ${m.isError ? 'error' : ''}`;
+              return `<div class="acp-message ${cls}"><div class="acp-meta"><b>${m.source === 'human' ? 'You' : escapeHtml(agent.agent_id)}</b><span class="acp-type-tag">${escapeHtml(m.type || (m.source === 'human' ? 'chat' : 'output'))}</span><span>${fmtDate(m.timestamp)}</span>${m.status ? `<span>${escapeHtml(m.status)}</span>` : ''}</div><div class="acp-bubble ${m.source === 'human' ? '' : 'markdown'}">${m.source === 'human' ? escapeHtml(m.content) : renderMarkdown(m.content)}</div></div>`;
+            }).join('') : `<div class="acp-empty">No outputs yet for ${escapeHtml(agent.agent_id)}.</div>`}
+          </div>
+          <div class="ops-agent-composer">
+            <textarea id="opsRailInput" class="acp-input ops-agent-input" placeholder="Send message to ${escapeHtml(agent.agent_id)}" ${offline || state.acpSending ? 'disabled' : ''}></textarea>
+            <div class="actions" style="margin:0;">
+              <button class="btn" data-action="send-ops-message" data-agent-id="${escapeHtml(agent.agent_id)}" ${offline || state.acpSending ? 'disabled' : ''}>Send message</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const msgBox = document.getElementById('opsRailMessages');
+      if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
+    }
+
+    function renderOperations() {
+      if (!refs.opsNavList || !refs.opsMainGrid) return;
+      let projects = [...state.projects.values()].sort((a,b) => (a.id - b.id));
+      projects = projects.filter(shouldShowProject);
+      ensureOperationsSelection(projects);
+
+      refs.opsAgentTotal.textContent = `${[...state.agents.values()].length} agents`;
+      refs.opsTasksCount.textContent = `Tasks: ${[...state.tasks.values()].filter(shouldShowTask).length}`;
+      refs.opsProjectsCount.textContent = `Projects: ${projects.length}`;
+
+      renderOperationsTree(projects);
+      renderOperationsDetail();
+      renderBlockerPanel();
+
+      renderOperationsRail();
+      renderOperationsEventLog();
+    }
+
+    function renderOperationsEventLog() {
+      if (!refs.opsEventLogList || !refs.opsEventLogPanel) return;
+      refs.opsEventLogPanel.classList.toggle('collapsed', state.operationsLogCollapsed);
+      refs.opsEventLogList.innerHTML = state.logEvents.slice(-80).map(e => `
+        <li class="event-item">
+          <span class="event-time">${fmtDate(e.ts)}</span>
+          <b>${escapeHtml(e.kind)}</b> — ${escapeHtml(e.message)}
+        </li>
+      `).join('');
+      refs.opsEventLogList.scrollTop = refs.opsEventLogList.scrollHeight;
+    }
+
+    // ── Agent Control Panel ──
+
+    function ensureAcpSelection() {
+      if (state.acpSelectedAgentId && state.agents.has(state.acpSelectedAgentId)) return state.acpSelectedAgentId;
+      const all = [...state.agents.values()].sort((a,b) => {
+        const aliveDiff = Number(!b.process_alive) - Number(!a.process_alive);
+        if (aliveDiff) return aliveDiff;
+        return String(a.agent_id).localeCompare(String(b.agent_id));
+      });
+      state.acpSelectedAgentId = all[0]?.agent_id || '';
+      if (state.acpSelectedAgentId) {
+        localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
+      }
+      return state.acpSelectedAgentId;
+    }
+
+    function getAcpOutputs(agentId) {
+      return state.acpOutputs.get(agentId) || [];
+    }
+
+    function acpOutputKey(message = {}) {
+      if (message.id) return `id:${message.id}`;
+      if (message.timestamp) return `ts:${message.timestamp}`;
+      return `fallback:${message.content || ''}`;
+    }
+
+    function mergeAcpOutput(prev = {}, next = {}) {
+      const prevContent = String(prev.content || '');
+      const nextContent = String(next.content || '');
+      const preferNextContent = nextContent.length >= prevContent.length;
+      return {
+        ...prev,
+        ...next,
+        source: 'agent',
+        content: preferNextContent ? nextContent : prevContent,
+        timestamp: next.timestamp || prev.timestamp || new Date().toISOString(),
+        model: next.model || prev.model,
+        stopReason: next.stopReason || prev.stopReason,
+        isError: Boolean(next.isError || prev.isError),
+      };
+    }
+
+    function setAcpOutputs(agentId, messages = []) {
+      const byKey = new Map();
+      for (const m of getAcpOutputs(agentId)) {
+        byKey.set(acpOutputKey(m), { ...m, source: 'agent' });
+      }
+      for (const m of messages) {
+        const normalized = { ...m, source: 'agent' };
+        const key = acpOutputKey(normalized);
+        const existing = byKey.get(key);
+        byKey.set(key, existing ? mergeAcpOutput(existing, normalized) : normalized);
+      }
+      const merged = [...byKey.values()].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      state.acpOutputs.set(agentId, merged);
+    }
+
+    function addAcpHumanMessage(agentId, content, meta = {}) {
+      const list = state.acpHumanMessages.get(agentId) || [];
+      list.push({
+        id: meta.id || `human-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        timestamp: meta.timestamp || new Date().toISOString(),
+        content,
+        type: meta.type || 'chat',
+        source: 'human',
+        status: meta.status || 'sent',
+      });
+      state.acpHumanMessages.set(agentId, list);
+    }
+
+    async function fetchAcpPreviews() {
+      const candidates = [...state.agents.values()]
+        .map(a => a.agent_id)
+        .filter(id => id && !state.acpPreviewRequested.has(id))
+        .slice(0, 50);
+      for (const id of candidates) state.acpPreviewRequested.add(id);
+      await Promise.all(candidates.map(async (id) => {
+        try {
+          const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(id)}/outputs?limit=1`);
+          if (Array.isArray(data.messages) && data.messages.length) setAcpOutputs(id, data.messages);
+        } catch {}
+      }));
+      if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperationsRail();
+    }
+
+    async function fetchAcpMessages() {
+      if (state.acpPaused) return;
+      const agentId = ensureAcpSelection();
+      if (!agentId) {
+        renderAcpWorkspace();
+        return;
+      }
+      fetchAcpPreviews();
+      try {
+        const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/outputs?limit=200`);
+        if (Array.isArray(data.messages)) setAcpOutputs(agentId, data.messages);
+        if (state.activeTab === 'agents') renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
+      } catch (err) {
+        addEventLog('acp-output-error', `No se pudo cargar outputs de ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
+        if (state.activeTab === 'agents') renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
+      }
+    }
+
+    function renderInlineMarkdown(text) {
+      return escapeHtml(text)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+
+    function renderMarkdown(text) {
+      const parts = [];
+      const src = String(text || '');
+      const fence = /```([^\n`]*)\n?([\s\S]*?)```/g;
+      let last = 0;
+      let match;
+      while ((match = fence.exec(src))) {
+        if (match.index > last) parts.push(renderMarkdownText(src.slice(last, match.index)));
+        const lang = (match[1] || '').trim();
+        parts.push(`<pre><code${lang ? ` class="lang-${escapeHtml(lang)}"` : ''}>${escapeHtml(match[2] || '')}</code></pre>`);
+        last = fence.lastIndex;
+      }
+      if (last < src.length) parts.push(renderMarkdownText(src.slice(last)));
+      return parts.join('');
+    }
+
+    function renderMarkdownText(text) {
+      const blocks = String(text || '').split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+      return blocks.map(block => {
+        const lines = block.split('\n');
+        const header = block.match(/^(#{1,3})\s+(.+)$/);
+        if (header) {
+          const level = header[1].length;
+          return `<h${level}>${renderInlineMarkdown(header[2])}</h${level}>`;
+        }
+        if (lines.every(l => /^\s*-\s+/.test(l))) {
+          return `<ul>${lines.map(l => `<li>${renderInlineMarkdown(l.replace(/^\s*-\s+/, ''))}</li>`).join('')}</ul>`;
+        }
+        if (lines.every(l => /^\s*\d+\.\s+/.test(l))) {
+          return `<ol>${lines.map(l => `<li>${renderInlineMarkdown(l.replace(/^\s*\d+\.\s+/, ''))}</li>`).join('')}</ol>`;
+        }
+        return `<p>${lines.map(renderInlineMarkdown).join('<br>')}</p>`;
+      }).join('');
+    }
+
+    function acpAgentActionLabel(agent) {
+      const s = agentStatus(agent);
+      if (!agent.process_alive || s === 'offline' || s === 'shutting_down') return '💀 offline';
+      if (s === 'error') return '🔴 ver error';
+      if (s === 'thinking') return '🧠 pensando';
+      if (s === 'tool_running') return `🔨 ${agent.active_tool || 'tool'}`;
+      if (['waiting_llm','streaming','processing','turn_active','agent_starting','processing_inbox'].includes(s)) return '⏳ busy';
+      return '💬 enviar';
+    }
+
+    function acpMessageSignature(agentId, messages = []) {
+      const parts = messages.map((m) => [
+        m.source || '',
+        m.id || '',
+        m.timestamp || '',
+        m.type || '',
+        m.status || '',
+        m.isError ? '1' : '0',
+        String(m.content || ''),
+      ].join('¦'));
+      return `${agentId}::${parts.length}::${parts.join('||')}`;
+    }
+
+    function renderAcpPanel() {
+      const agentId = ensureAcpSelection();
+      const agent = state.agents.get(agentId);
+      if (!agentId || !agent) {
+        const emptyHeader = `<div><strong>Selecciona un agente</strong><div class="muted">No hay agente activo.</div></div>`;
+        if (state.acpHeaderSignature !== 'empty-header') {
+          refs.acpHeader.innerHTML = emptyHeader;
+          state.acpHeaderSignature = 'empty-header';
+        }
+        if (state.acpMessagesSignature !== 'empty-messages') {
+          refs.acpMessages.innerHTML = `<div class="acp-empty">No hay agente seleccionado.</div>`;
+          state.acpMessagesSignature = 'empty-messages';
+        }
+        state.acpRenderedAgentId = '';
+        refs.acpInput.disabled = true;
+        return;
+      }
+
+      const offline = !agent.process_alive || ['offline','shutting_down'].includes(agentStatus(agent));
+      const headerHtml = `
+        <div>
+          <strong>💬 ${escapeHtml(agentId)}</strong>
+          <div class="muted">${escapeHtml(agent.role || 'agent')} · ${escapeHtml(agent.model || '--')} · ${escapeHtml(agent.session || '--')}</div>
+        </div>
+        <div style="text-align:right;">${agentBadge(agentStatus(agent))}<div class="muted">${escapeHtml(acpAgentActionLabel(agent))}</div></div>
+      `;
+      const headerSig = [
+        agentId,
+        agentStatus(agent),
+        agent.role || '',
+        agent.model || '',
+        agent.session || '',
+        agent.active_tool || '',
+        offline ? '1' : '0',
+        state.acpSending ? '1' : '0',
+      ].join('|');
+      if (state.acpHeaderSignature !== headerSig) {
+        refs.acpHeader.innerHTML = headerHtml;
+        state.acpHeaderSignature = headerSig;
+      }
+
+      refs.acpInput.disabled = offline || state.acpSending;
+      refs.acpInput.placeholder = offline ? 'Agente offline: no se puede enviar.' : 'Escribe un mensaje para el agente seleccionado…';
+
+      const human = (state.acpHumanMessages.get(agentId) || []).map(m => ({ ...m, source: 'human' }));
+      const outputs = getAcpOutputs(agentId).map(m => ({ ...m, source: 'agent' }));
+      const all = human.concat(outputs).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      const messagesSig = all.length
+        ? acpMessageSignature(agentId, all)
+        : `empty:${agentId}`;
+      const agentChanged = state.acpRenderedAgentId !== agentId;
+      if (!agentChanged && state.acpMessagesSignature === messagesSig) {
+        return;
+      }
+
+      const prevTop = refs.acpMessages.scrollTop;
+      const prevHeight = refs.acpMessages.scrollHeight;
+      const prevClient = refs.acpMessages.clientHeight;
+      const nearBottom = (prevHeight - (prevTop + prevClient)) < 24;
+
+      if (!all.length) {
+        refs.acpMessages.innerHTML = `<div class="acp-empty">Sin outputs para ${escapeHtml(agentId)}.<br><span class="muted">Las próximas respuestas del asistente se persistirán en outputs/${escapeHtml(agentId)}.jsonl.</span></div>`;
+      } else {
+        refs.acpMessages.innerHTML = all.map(m => {
+          const isHuman = m.source === 'human';
+          const cls = `${isHuman ? 'human' : 'agent'} ${m.isError ? 'error' : ''}`;
+          return `<div class="acp-message ${cls}">
+            <div class="acp-meta"><b>${isHuman ? 'Tú' : escapeHtml(agentId)}</b><span class="acp-type-tag">${escapeHtml(m.type || (isHuman ? 'chat' : 'output'))}</span><span>${fmtDate(m.timestamp)}</span>${m.status ? `<span>${escapeHtml(m.status)}</span>` : ''}</div>
+            <div class="acp-bubble ${isHuman ? '' : 'markdown'}">${isHuman ? escapeHtml(m.content) : renderMarkdown(m.content)}</div>
+          </div>`;
+        }).join('');
+      }
+
+      if (agentChanged || nearBottom) {
+        refs.acpMessages.scrollTop = refs.acpMessages.scrollHeight;
+      } else {
+        const nextHeight = refs.acpMessages.scrollHeight;
+        refs.acpMessages.scrollTop = Math.max(0, prevTop + (nextHeight - prevHeight));
+      }
+
+      state.acpRenderedAgentId = agentId;
+      state.acpMessagesSignature = messagesSig;
+    }
+
+    function renderAcpWorkspace() {
+      if (!refs.acpHeader || !refs.acpMessages || !refs.acpInput) return;
+      renderAcpPanel();
+    }
+
+    async function sendAcpMessage(type = 'chat', extra = {}) {
+      const agentId = ensureAcpSelection();
+      if (!agentId) return;
+      const text = String(extra.text ?? refs.acpInput.value ?? '').trim();
+      if (!text) return;
+      state.acpSending = true;
+      renderAcpWorkspace();
+      try {
+        const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, text, from: 'human', ...extra }),
+        });
+        addAcpHumanMessage(agentId, text, { id: data.messageId, type, status: data.note || 'sent' });
+        if (!extra.text) refs.acpInput.value = '';
+        addEventLog('acp-message', `${type} enviado a ${agentId}`, { agent_id: agentId, ...data }, 'agent');
+      } catch (err) {
+        addAcpHumanMessage(agentId, text, { type, status: `error: ${err.message}` });
+        addEventLog('acp-message-error', `No se pudo enviar a ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
+      } finally {
+        state.acpSending = false;
+        renderAcpWorkspace();
+        if (state.activeTab === 'operations') renderOperationsRail();
+      }
+    }
+
+    function openAcpTaskModal() {
+      const agentId = ensureAcpSelection();
+      const criteria = JSON.stringify([{ id: 'manual-1', description: 'Validación manual del resultado', type: 'manual', params: { instructions: 'Revisar la respuesta y artefactos generados.' }, required: true }], null, 2);
+      openModal('Enviar tarea estructurada', `
+        <div class="controls" style="align-items:stretch;flex-direction:column;">
+          <label class="muted">Agente</label>
+          <input class="agent-search" id="acpTaskAgent" value="${escapeHtml(agentId)}" disabled>
+          <label class="muted">Proyecto PM ID (opcional, crea task)</label>
+          <input class="agent-search" id="acpTaskProject" value="3">
+          <label class="muted">Título</label>
+          <input class="agent-search" id="acpTaskTitle" placeholder="Título corto">
+          <label class="muted">Descripción</label>
+          <textarea class="acp-input" id="acpTaskDescription" style="width:100%;min-height:110px;"></textarea>
+          <label class="muted">Acceptance criteria JSON</label>
+          <textarea class="acp-input" id="acpTaskCriteria" style="width:100%;min-height:150px;">${escapeHtml(criteria)}</textarea>
+          <button class="btn" data-action="submit-acp-task">Enviar tarea</button>
+        </div>
+      `);
+    }
+
+    async function submitAcpTaskFromModal() {
+      const description = document.getElementById('acpTaskDescription')?.value?.trim();
+      if (!description) { alert('Descripción requerida'); return; }
+      let acceptance_criteria = [];
+      try { acceptance_criteria = JSON.parse(document.getElementById('acpTaskCriteria')?.value || '[]'); }
+      catch (err) { alert(`Acceptance criteria JSON inválido: ${err.message}`); return; }
+      await sendAcpMessage('task', {
+        text: description,
+        description,
+        title: document.getElementById('acpTaskTitle')?.value?.trim() || description.slice(0, 80),
+        project_id: Number(document.getElementById('acpTaskProject')?.value || 0) || undefined,
+        acceptance_criteria,
+      });
+      closeModal();
+    }
+
+    function populateProjectFilter() {
+      const current = refs.projectFilter.value || state.projectFilterId || '';
+      const opts = ['<option value="">Todos</option>']
+        .concat([...state.projects.values()].sort((a,b)=>a.id-b.id).map(p =>
+          `<option value="${escapeHtml(p.id)}">${escapeHtml((p.code || `p${p.id}`) + ' - ' + (p.name || ''))}</option>`
+        ));
+      refs.projectFilter.innerHTML = opts.join('');
+      if ([...refs.projectFilter.options].some(o => o.value === current)) {
+        refs.projectFilter.value = current;
+        state.projectFilterId = current;
+      } else {
+        refs.projectFilter.value = '';
+        state.projectFilterId = '';
+      }
+      persistUiState({ projectFilterId: state.projectFilterId });
+    }
+
+    function switchTab(tab) {
+      const validTabs = new Set(['operations','agents','projects','tasks','timeline','subtasks']);
+      state.activeTab = validTabs.has(tab) ? tab : 'operations';
+      persistUiState({ activeTab: state.activeTab });
+      document.querySelectorAll('.tab-btn').forEach((b) => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+      });
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${tab}`));
+
+      if (tab === 'operations') renderOperations();
+      if (tab === 'timeline') renderTimeline();
+      if (tab === 'projects') renderProjects();
+      if (tab === 'tasks') renderTasks();
+      if (tab === 'agents') { renderAgents(); fetchAcpMessages(); }
+      if (tab === 'subtasks') renderSubtasksQueue();
+    }
+
+    async function fetchSubtasksQueue() {
+      try {
+        const data = await fetchJson(`${API}/api/subtasks/queue`);
+        state.subtasksQueue = data;
+        if (state.activeTab === 'subtasks') renderSubtasksQueue();
+      } catch (err) {
+        addEventLog('subtasks-queue-error', `No se pudo cargar subtasks queue: ${err.message}`, {}, 'project');
+      }
+    }
+
+    function renderSubtasksQueue() {
+      const { ready, running, blocked, counts } = state.subtasksQueue || {};
+
+      refs.subtaskStatsBar.innerHTML = `
+        <span class="stat">Ready: <b>${counts?.ready ?? 0}</b></span>
+        <span class="stat">Running: <b>${counts?.running ?? 0}</b></span>
+        <span class="stat">Blocked: <b>${counts?.blocked ?? 0}</b></span>
+      `;
+
+      const readyRows = (ready || []).map(s => `
+        <div class="subtask-row">
+          <div class="subtask-col-id">${escapeHtml(s.id)}</div>
+          <div class="subtask-col-title">${escapeHtml(s.title || '--')}</div>
+          <div class="subtask-col-task">${escapeHtml(s.task_title || `Task #${s.task_id}`)}</div>
+          <div class="subtask-col-priority">${escapeHtml(s.priority ?? 0)}</div>
+        </div>
+      `).join('');
+
+      refs.subtaskReadyTable.innerHTML = readyRows.length ? `
+        <div class="subtask-header">
+          <div class="subtask-col-id">ID</div>
+          <div class="subtask-col-title">Title</div>
+          <div class="subtask-col-task">Task</div>
+          <div class="subtask-col-priority">Priority</div>
+        </div>
+        ${readyRows}
+      ` : `<div class="muted" style="padding:10px 12px;">No ready subtasks.</div>`;
+
+      const runningRows = (running || []).map(s => `
+        <div class="subtask-row">
+          <div class="subtask-col-id">${escapeHtml(s.id)}</div>
+          <div class="subtask-col-title">${escapeHtml(s.title || '--')}</div>
+          <div class="subtask-col-agent">${escapeHtml(s.worker_agent_id || '--')}</div>
+        </div>
+      `).join('');
+
+      refs.subtaskRunningTable.innerHTML = runningRows.length ? `
+        <div class="subtask-header" style="grid-template-columns: 60px 1fr 1fr;">
+          <div class="subtask-col-id">ID</div>
+          <div class="subtask-col-title">Title</div>
+          <div class="subtask-col-agent">Assigned Agent</div>
+        </div>
+        ${runningRows}
+      ` : `<div class="muted" style="padding:10px 12px;">No running subtasks.</div>`;
+    }
+
+    function openModal(title, html) {
+      refs.modalTitle.textContent = title;
+      refs.modalContent.innerHTML = html;
+      refs.modal.classList.add('open');
+      refs.modal.setAttribute('aria-hidden', 'false');
+    }
+    function closeModal() {
+      refs.modal.classList.remove('open');
+      refs.modal.setAttribute('aria-hidden', 'true');
+      refs.modalContent.innerHTML = '';
+    }
+
+    async function fetchJson(url, options) {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return await res.json();
+    }
+
+    async function fetchProjectsFallback() {
+      try {
+        const filter = state.showOnlyActive ? '?filter=active' : '';
+        const payload = await fetchJson(`${API}/api/projects/summary${filter}`);
+        const projects = Array.isArray(payload) ? payload : payload?.projects;
+        if (Array.isArray(projects)) {
+          setProjects(projects);
+          return;
+        }
+      } catch {}
+
+      // Backward fallback for older monitor servers
+      try {
+        const filter = state.showOnlyActive ? '?filter=active' : '';
+        const payload = await fetchJson(`${API}/api/projects${filter}`);
+        const projects = Array.isArray(payload) ? payload : payload?.projects;
+        if (Array.isArray(projects)) setProjects(projects);
+      } catch {}
+    }
+
+    async function fetchAgentsFallback() {
+      try {
+        const payload = await fetchJson(`${API}/api/agents?hierarchy=true`);
+        const agents = Array.isArray(payload) ? payload : payload?.hierarchy || payload?.agents;
+        if (Array.isArray(agents) && agents.length) {
+          setAgents(agents);
+          return;
+        }
+      } catch {}
+
+      // Backward fallback for older monitor servers
+      try {
+        const payload = await fetchJson(`${API}/api/agents`);
+        const agents = Array.isArray(payload) ? payload : payload?.agents;
+        if (Array.isArray(agents) && agents.length) setAgents(agents);
+      } catch {}
+    }
+
+    async function refreshCoreData() {
+      try {
+        await Promise.all([fetchAgentsFallback(), fetchProjectsFallback(), fetchTasks()]);
+        refs.lastSync.textContent = `Sync: ${nowStr()}`;
+      } catch (err) {
+        addEventLog('refresh-error', `No se pudo sync dashboard core data: ${err.message}`, {}, 'system');
+      }
+    }
+
+    async function fetchTasks(projectId = '') {
+      try {
+        const params = new URLSearchParams();
+        if (projectId) params.set('project_id', String(projectId));
+        if (state.showOnlyActive) params.set('filter', 'active');
+        params.set('include_subtasks', 'true');
+        const q = params.toString() ? `?${params.toString()}` : '';
+        const tasks = await fetchJson(`${API}/api/tasks${q}`);
+        if (Array.isArray(tasks)) {
+          for (const t of tasks) upsertTask(t);
+          if (state.activeTab === 'tasks') renderTasks();
+          return;
+        }
+      } catch (err) {
+        addEventLog('tasks-error', `No se pudo cargar tasks: ${err.message}`, {}, 'project');
+      }
+
+      // Backward fallback (without subtasks include)
+      try {
+        const params = new URLSearchParams();
+        if (projectId) params.set('project_id', String(projectId));
+        if (state.showOnlyActive) params.set('filter', 'active');
+        const q = params.toString() ? `?${params.toString()}` : '';
+        const tasks = await fetchJson(`${API}/api/tasks${q}`);
+        if (Array.isArray(tasks)) {
+          for (const t of tasks) upsertTask(t);
+          if (state.activeTab === 'tasks') renderTasks();
+        }
+      } catch (err) {
+        addEventLog('tasks-fallback-error', `No se pudo cargar tasks fallback: ${err.message}`, {}, 'project');
+      }
+    }
+
+    async function openAgentLog(agentId) {
+      try {
+        const data = await fetchJson(`${API}/api/log/${encodeURIComponent(agentId)}?limit=100`);
+        const lines = data.lines || [];
+        if (!lines.length) {
+          openModal(`Log: ${agentId}`, `<div class="modal-empty">Mailbox empty.</div>`);
+          return;
+        }
+        const html = lines.map((line) => {
+          const pretty = JSON.stringify(line, null, 2);
+          return `<div class="modal-line"><pre style="margin:0;white-space:pre-wrap;word-break:break-word;">${escapeHtml(pretty)}</pre></div>`;
+        }).join('');
+        openModal(`📨 Mailbox Log — ${agentId}`, html);
+      } catch (err) {
+        openModal(`Log: ${agentId}`, `<div class="error-box">${escapeHtml(err.message)}</div>`);
+      }
+    }
+
+    async function openProjectDetail(projectId) {
+      const p = state.projects.get(Number(projectId));
+      if (!p) return;
+      let tasks = [...state.tasks.values()].filter(t => Number(t.project_id) === Number(projectId));
+      if (!tasks.length) {
+        try { tasks = await fetchJson(`${API}/api/tasks?project_id=${encodeURIComponent(projectId)}`); }
+        catch {}
+      }
+      tasks.sort((a,b) => (a.sequence_order ?? 99999) - (b.sequence_order ?? 99999));
+
+      let events = [];
+      try {
+        const ev = await fetchJson(`${API}/api/events/projects?since=0`);
+        events = Array.isArray(ev) ? ev.filter(e => Number(e.project_id) === Number(projectId)).slice(-10) : [];
+      } catch {}
+
+      openModal(
+        `${p.code || `p${p.id}`} — ${p.name || 'Project'}`,
+        `
+          <div class="chip-row">
+            ${projectStatusBadge(p.status)}
+            <span class="chip">ID ${escapeHtml(p.id)}</span>
+            ${p.repo_url ? `<a href="${escapeHtml(p.repo_url)}" target="_blank" rel="noopener">repo_url</a>` : '<span class="muted">sin repo_url</span>'}
+          </div>
+
+          <div class="section-title">Tasks</div>
+          <div>
+            ${tasks.map(t => `
+              <div class="card" style="padding:10px;">
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+                  <strong><a href="#" data-action="open-task" data-task-id="${escapeHtml(t.id)}">${escapeHtml(t.title || `Task #${t.id}`)}</a></strong>
+                  ${taskStatusBadge(t.status)}
+                </div>
+                <div class="chip-row">
+                  ${(t.agent_ids || []).map(aid => {
+                    const ag = state.agents.get(aid);
+                    const alive = ag?.process_alive;
+                    const color = alive ? 'var(--green)' : 'var(--red)';
+                    return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</span>`;
+                  }).join('')}
+                  ${t.pr_url ? `<a href="${escapeHtml(t.pr_url)}" target="_blank" rel="noopener">PR</a>` : ''}
+                </div>
+              </div>
+            `).join('') || '<div class="muted">No hay tasks.</div>'}
+          </div>
+
+          <div class="section-title">Eventos recientes</div>
+          <ul class="timeline-list">
+            ${events.map(e => `<li class="timeline-item"><span class="event-time">${fmtDate(e.ts || e.timestamp || Date.now())}</span>${escapeHtml(e.event || e.type || 'event')} — ${escapeHtml(JSON.stringify(e.data || e.payload || e))}</li>`).join('') || '<li class="muted">Sin eventos</li>'}
+          </ul>
+        `
+      );
+    }
+
+    async function openTaskDetail(taskId) {
+      let t = state.tasks.get(Number(taskId));
+      if (!t) {
+        try {
+          const tasks = await fetchJson(`${API}/api/tasks`);
+          t = tasks.find(x => Number(x.id) === Number(taskId));
+          if (t) upsertTask(t);
+        } catch {}
+      }
+      if (!t) return;
+
+      let subtasks = t.subtasks || t.subtask_items || [];
+      if (!subtasks.length && t.id != null) {
+        try {
+          subtasks = await fetchJson(`${API}/api/subtasks?task_id=${encodeURIComponent(t.id)}`);
+        } catch {}
+      }
+      const blockedBy = t.blocked_by_ids || t.depends_on || t.dependencies || [];
+      const blocking = t.blocking_ids || t.blocks || [];
+      const taskEvents = state.allEvents
+        .filter(e => Number(e.payload?.task_id ?? e.payload?.id) === Number(t.id))
+        .slice(-5)
+        .reverse();
+
+      openModal(
+        `Task #${t.id}: ${t.title || ''}`,
+        `
+        <div class="chip-row">
+          ${taskStatusBadge(t.status)}
+          <span class="chip">${escapeHtml(t.project_code || `project ${t.project_id}`)}</span>
+        </div>
+
+        <div class="section-title">Metadata</div>
+        <div class="meta-grid">
+          <div><b>branch:</b> ${escapeHtml(t.branch || '--')}</div>
+          <div><b>base_branch:</b> ${escapeHtml(t.base_branch || '--')}</div>
+          <div><b>worktree:</b> ${escapeHtml(t.worktree_path || '--')}</div>
+          <div><b>tmux_session:</b> ${escapeHtml(t.tmux_session || '--')}</div>
+          <div><b>coordinator:</b> ${renderAgentJumpLink(getTaskOwnership(t).coordinator)}</div>
+          <div><b>orchestrator/subcoord:</b> ${renderAgentJumpLink(getTaskOwnership(t).orchestrator)}</div>
+          <div><b>asana:</b> ${t.asana_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.asana_url)}">link</a>` : '--'}</div>
+          <div><b>PR:</b> ${t.pr_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.pr_url)}">link</a> ${taskStatusBadge(t.pr_status || (t.status?.startsWith('pr_') ? t.status : ''))}` : '--'}</div>
+        </div>
+
+        <div class="section-title">Subtasks</div>
+        <div>
+          ${subtasks.length ? subtasks.map(st => `
+            <div style="display:flex;flex-direction:column;gap:4px;margin:6px 0;">
+              <label style="display:flex;gap:8px;align-items:center;">
+                <input type="checkbox" ${st.status === 'done' || st.done ? 'checked' : ''} disabled />
+                <span>${escapeHtml(st.title || st.text || JSON.stringify(st))}</span>
+              </label>
+              <div class="chip-row" style="padding-left:24px;">
+                ${(st.agent_ids || []).map(aid => {
+                  const ag = state.agents.get(aid);
+                  const alive = ag?.process_alive;
+                  const color = alive ? 'var(--green)' : 'var(--red)';
+                  return `<a href="#" class="chip" data-action="select-acp-agent" data-agent-id="${escapeHtml(aid)}" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</a>`;
+                }).join('') || '<span class="muted" style="font-size:11px;">Sin agentes</span>'}
+              </div>
+            </div>
+          `).join('') : `<div class="muted">Sin subtasks detalladas (count: ${escapeHtml(t.subtask_count ?? 0)} done: ${escapeHtml(t.subtask_done_count ?? 0)})</div>`}
+        </div>
+
+        <div class="section-title">Dependencies</div>
+        <div class="meta-grid">
+          <div><b>Blocked by:</b> ${(blockedBy || []).length ? (blockedBy.map(id => `<a href="#" data-action="open-task" data-task-id="${escapeHtml(typeof id === 'object' ? id.id : id)}">#${escapeHtml(typeof id === 'object' ? id.id : id)}</a>`).join(', ')) : '--'}</div>
+          <div><b>Blocking:</b> ${(blocking || []).length ? (blocking.map(id => `<a href="#" data-action="open-task" data-task-id="${escapeHtml(typeof id === 'object' ? id.id : id)}">#${escapeHtml(typeof id === 'object' ? id.id : id)}</a>`).join(', ')) : '--'}</div>
+        </div>
+
+        <div class="section-title">Agents</div>
+        <div class="chip-row">
+          ${(t.agent_ids || []).map(aid => {
+            const ag = state.agents.get(aid);
+            const alive = ag?.process_alive;
+            const color = alive ? 'var(--green)' : 'var(--red)';
+            return `<a href="#" class="chip" data-action="select-acp-agent" data-agent-id="${escapeHtml(aid)}" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}${ag?.role ? ` · ${escapeHtml(ag.role)}` : ''}</a>`;
+          }).join('') || '<span class="muted">Sin agentes asignados</span>'}
+        </div>
+
+        <div class="section-title">Event history</div>
+        <ul class="timeline-list">
+          ${taskEvents.map(e => `<li class="timeline-item"><span class="event-time">${fmtDate(e.ts)}</span>${escapeHtml(e.kind)} — ${escapeHtml(e.message)}</li>`).join('') || '<li class="muted">Sin eventos recientes</li>'}
+        </ul>
+        `
+      );
+    }
+
+    function mergeTaskPatchFromEvent(payload = {}) {
+      const id = Number(payload.task_id ?? payload.id ?? payload.taskId);
+      if (!Number.isFinite(id)) return null;
+      const prev = state.tasks.get(id) || { id };
+      const patch = {
+        ...prev,
+        id,
+        task_id: id,
+        status: payload.status ?? prev.status,
+        title: payload.title ?? prev.title,
+        project_id: Number(payload.project_id ?? prev.project_id),
+        updated_at: payload.updated_at ?? payload.ts ?? new Date().toISOString(),
+      };
+      return patch;
+    }
+
+    function applyRealtimeEntityEvent(eventName, payload) {
+      const lower = String(eventName || '').toLowerCase();
+
+      if (lower.includes('project')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const projectId = Number(payload?.project_id ?? payload?.id);
+          if (Number.isFinite(projectId)) removeProject(projectId);
+        } else {
+          const project = payload?.project || payload;
+          if (project) upsertProject(project);
+        }
+      }
+
+      if (lower.includes('task')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const taskId = Number(payload?.task_id ?? payload?.id ?? payload?.task?.id);
+          if (Number.isFinite(taskId)) removeTask(taskId);
+        } else {
+          const task = payload?.task || payload?.task_row || payload?.data?.task || payload;
+          if (task && (task.id != null || task.task_id != null)) upsertTask(task);
+          else {
+            const patch = mergeTaskPatchFromEvent(payload);
+            if (patch) upsertTask(patch);
+          }
+        }
+      }
+
+      if (lower.includes('subtask')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const subtaskId = Number(payload?.subtask_id ?? payload?.id);
+          if (Number.isFinite(subtaskId)) state.subtasks.delete(subtaskId);
+        } else {
+          const subtask = payload?.subtask || payload?.data?.subtask || payload;
+          const mergedSubtask = upsertSubtask(subtask, { taskId: Number(payload?.task_id ?? subtask?.task_id) });
+          if (mergedSubtask?.task_id != null) {
+            const taskId = Number(mergedSubtask.task_id);
+            const task = state.tasks.get(taskId);
+            if (task) {
+              task.subtasks = materializeTaskSubtasks(taskId);
+              task._lastSnapshot = Date.now();
+              state.tasks.set(taskId, task);
+            }
+          }
+        }
+      }
+
+      if (lower.includes('agent-associated') || lower.includes('agent-assigned')) {
+        const taskId = Number(payload?.task_id);
+        if (Number.isFinite(taskId) && state.tasks.has(taskId)) {
+          const t = { ...state.tasks.get(taskId) };
+          t.agent_ids = Array.from(new Set([...(t.agent_ids || []), ...(payload.agent_ids || []), payload.agent_id].filter(Boolean)));
+          upsertTask(t);
+        }
+      }
+
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
+    function setupSSE() {
+      const es = new EventSource(`${API}/api/stream`);
+
+      es.onopen = () => {
+        state.sseConnected = true;
+        refs.sseStatus.textContent = 'SSE: connected';
+        addEventLog('sse-open', 'Conexión SSE establecida', {}, 'system');
+      };
+
+      es.onerror = () => {
+        state.sseConnected = false;
+        refs.sseStatus.textContent = 'SSE: reconnecting…';
+      };
+
+      const parse = (data) => {
+        try { return JSON.parse(data); } catch { return data; }
+      };
+
+      es.addEventListener('snapshot', (ev) => {
+        const payload = parse(ev.data);
+        const agents = Array.isArray(payload)
+          ? payload
+          : payload?.hierarchy || payload?.agents;
+        if (Array.isArray(agents)) setAgents(agents);
+        addEventLog('snapshot', 'Snapshot de agentes', payload, 'agent');
+      });
+
+      es.addEventListener('projects-snapshot', (ev) => {
+        const payload = parse(ev.data);
+        const projects = Array.isArray(payload) ? payload : payload?.projects;
+        if (Array.isArray(projects)) setProjects(projects);
+        addEventLog('projects-snapshot', 'Snapshot de proyectos', payload, 'project');
+      });
+
+      es.addEventListener('agent-update', (ev) => {
+        const payload = parse(ev.data);
+        upsertAgent(payload);
+        addEventLog('agent-update', `${payload?.agent_id || 'agent'} actualizado`, payload, 'agent');
+      });
+
+      ['agent-registered','agent-offline','agent-back','agent-blocked'].forEach(name => {
+        es.addEventListener(name, (ev) => {
+          const payload = parse(ev.data);
+          if (payload?.agent_id) upsertAgent(payload);
+          addEventLog(name, `${payload?.agent_id || 'agent'} ${name}`, payload, 'agent');
+        });
+      });
+      es.addEventListener('agent-removed', (ev) => {
+        const payload = parse(ev.data);
+        if (payload?.agent_id) {
+          removeAgent(payload.agent_id);
+          addEventLog('agent-removed', `${payload.agent_id} eliminado del dashboard`, payload, 'agent');
+        }
+      });
+
+      const realtimeEntityEvents = [
+        'task-created','task-create','task-updated','task-update','task-status-changed','task-deleted','task-removed',
+        'subtask-created','subtask-update','subtask-updated','subtask-status-changed','subtask-deleted','subtask-removed',
+        'project-created','project-updated','project-status-changed','project-deleted','project-removed',
+        'agent-associated','agent-assigned'
+      ];
+      for (const name of realtimeEntityEvents) {
+        es.addEventListener(name, (ev) => {
+          const payload = parse(ev.data);
+          applyRealtimeEntityEvent(name, payload); // incremental SSE updates
+          addEventLog(name, `Realtime ${name}`, payload, 'project');
+        });
+      }
+
+      es.addEventListener('log-event', (ev) => {
+        const payload = parse(ev.data);
+        addEventLog('log-event', payload?.message || JSON.stringify(payload), payload, payload?.source || 'system');
+      });
+
+      es.addEventListener('agent-output', (ev) => {
+        const payload = parse(ev.data);
+        if (payload?.agent_id) {
+          const existing = getAcpOutputs(payload.agent_id);
+          if (payload.preview && !existing.some(m => m.timestamp === payload.timestamp)) {
+            setAcpOutputs(payload.agent_id, [{
+              agent_id: payload.agent_id,
+              timestamp: payload.timestamp || new Date().toISOString(),
+              content: payload.preview,
+              model: payload.model,
+              stopReason: payload.stopReason,
+              isError: !!payload.isError,
+            }]);
+          }
+          if (state.activeTab === 'agents') {
+            if (payload.agent_id === state.acpSelectedAgentId) fetchAcpMessages();
+            else renderAgents();
+          }
+        }
+        addEventLog('agent-output', `${payload?.agent_id || 'agent'} output`, payload, 'agent');
+      });
+
+      es.addEventListener('ping', () => {
+        refs.lastSync.textContent = `Sync: ${nowStr()}`;
+      });
+
+      es.addEventListener('telegram-status', (ev) => {
+        const payload = parse(ev.data);
+        const connected = payload?.connected === true;
+        const info = payload?.info || '';
+        if (connected) {
+          refs.telegramStatus.textContent = `📱 Telegram: connected ${info}`;
+          refs.telegramStatus.style.color = 'var(--green)';
+        } else {
+          refs.telegramStatus.textContent = `📵 Telegram: offline ${info}`;
+          refs.telegramStatus.style.color = 'var(--red)';
+        }
+      });
+    }
+
+    document.addEventListener('click', async (e) => {
+      const el = e.target.closest('[data-action], .tab-btn');
+      if (!el) return;
+
+      if (el.classList.contains('tab-btn')) {
+        switchTab(el.dataset.tab);
+        return;
+      }
+
+      const action = el.dataset.action;
+      if (action === 'close-modal') closeModal();
+
+      if (action === 'toggle-log-collapse') {
+        refs.logPanel.classList.toggle('collapsed');
+        state.eventLogCollapsed = refs.logPanel.classList.contains('collapsed');
+        persistUiState({ eventLogCollapsed: state.eventLogCollapsed });
+      }
+      if (action === 'toggle-log-pause') {
+        state.logPaused = !state.logPaused;
+        el.textContent = state.logPaused ? 'Reanudar' : 'Pausar';
+      }
+      if (action === 'clear-log') {
+        state.logEvents = [];
+        renderEventLog();
+      }
+
+      if (action === 'toggle-timeline-pause') {
+        state.timelinePaused = !state.timelinePaused;
+        el.textContent = state.timelinePaused ? 'Reanudar timeline' : 'Pausar timeline';
+      }
+
+      if (action === 'refresh-tasks') fetchTasks(refs.projectFilter.value);
+
+      if (action === 'select-ops-lane') {
+        state.operationsLane = el.dataset.lane || 'coordinators';
+        renderOperations();
+        return;
+      }
+
+      if (action === 'select-ops-project') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        if (Number.isFinite(projectId)) {
+          state.operationsExpandedProjects[projectId] = state.operationsExpandedProjects[projectId] === false;
+          state.operationsSelection = { type: 'project', projectId, taskId: null, subtaskId: null };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'select-ops-task') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        const taskId = Number(el.dataset.taskId);
+        if (Number.isFinite(taskId)) {
+          if (Number.isFinite(projectId)) state.operationsExpandedProjects[projectId] = true;
+          state.operationsSelection = { type: 'task', projectId: Number.isFinite(projectId) ? projectId : null, taskId, subtaskId: null };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'select-ops-subtask') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        const taskId = Number(el.dataset.taskId);
+        const subtaskId = Number(el.dataset.subtaskId);
+        if (Number.isFinite(subtaskId)) {
+          if (Number.isFinite(projectId)) state.operationsExpandedProjects[projectId] = true;
+          state.operationsSelection = {
+            type: 'subtask',
+            projectId: Number.isFinite(projectId) ? projectId : null,
+            taskId: Number.isFinite(taskId) ? taskId : null,
+            subtaskId,
+          };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'toggle-ops-log') {
+        state.operationsLogCollapsed = !state.operationsLogCollapsed;
+        persistUiState({ operationsLogCollapsed: state.operationsLogCollapsed });
+        renderOperationsEventLog();
+        el.textContent = state.operationsLogCollapsed ? 'Expand' : 'Collapse';
+        return;
+      }
+
+      if (action === 'refresh-acp') {
+        state.acpPaused = false;
+        fetchAcpMessages();
+      }
+
+      if (action === 'select-agent-card' || action === 'select-acp-agent') {
+        state.acpSelectedAgentId = el.dataset.agentId || '';
+        localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
+        renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
+        fetchAcpMessages();
+        return;
+      }
+
+      if (action === 'send-acp-message') {
+        await sendAcpMessage('chat');
+        return;
+      }
+
+      if (action === 'send-ops-message') {
+        const agentId = el.dataset.agentId || state.acpSelectedAgentId || ensureAcpSelection();
+        const input = document.getElementById('opsRailInput');
+        const text = String(input?.value || '').trim();
+        if (!text) return;
+        state.acpSelectedAgentId = agentId;
+        localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
+        await sendAcpMessage('chat', { text });
+        if (input) input.value = '';
+        renderOperationsRail();
+        return;
+      }
+
+      if (action === 'open-acp-task-modal') {
+        openAcpTaskModal();
+        return;
+      }
+
+      if (action === 'submit-acp-task') {
+        await submitAcpTaskFromModal();
+        return;
+      }
+
+      if (action === 'ping-agent' || action === 'ping-selected-agent') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (!id) return;
+        try {
+          await fetchJson(`${API}/api/healthcheck/${encodeURIComponent(id)}`, { method: 'POST' });
+          addEventLog('healthcheck', `Ping enviado a ${id}`, { agent_id: id }, 'agent');
+        } catch (err) {
+          addEventLog('healthcheck-error', `Ping falló para ${id}: ${err.message}`, { agent_id: id }, 'agent');
+        }
+      }
+
+      if (action === 'kill-agent') {
+        const id = el.dataset.agentId;
+        if (!confirm(`¿Kill pane para ${id}?`)) return;
+        try {
+          await fetchJson(`${API}/api/kill/${encodeURIComponent(id)}`, { method: 'POST' });
+          addEventLog('kill', `Kill enviado a ${id}`, { agent_id: id }, 'agent');
+        } catch (err) {
+          addEventLog('kill-error', `Kill falló para ${id}: ${err.message}`, { agent_id: id }, 'agent');
+        }
+      }
+
+      if (action === 'toggle-agent-group') {
+        const groupKey = el.dataset.groupKey;
+        if (groupKey) {
+          const next = !state.agentGroupCollapsed[groupKey];
+          setAgentGroupCollapsed(groupKey, next);
+        }
+      }
+
+      if (action === 'toggle-history') {
+        refs.historyAgentsPanel.classList.toggle('collapsed');
+        state.historyPanelCollapsed = refs.historyAgentsPanel.classList.contains('collapsed');
+        persistUiState({ historyPanelCollapsed: state.historyPanelCollapsed });
+      }
+
+      if (action === 'purge-offline') {
+        if (!confirm('¿Purgar TODOS los agentes offline/shutting_down del registry?')) return;
+        try {
+          const data = await fetchJson(`${API}/api/purge-offline`, { method: 'POST' });
+          addEventLog('purge-offline', `Purgados ${data.purged_count} agentes: ${(data.purged || []).join(', ')}`, data, 'agent');
+          // Remove from local state immediately
+          for (const id of (data.purged || [])) {
+            state.agents.delete(id);
+          }
+          renderAgents();
+        } catch (err) {
+          addEventLog('purge-offline-error', `Purge falló: ${err.message}`, {}, 'agent');
+        }
+      }
+
+      if (action === 'view-log' || action === 'open-selected-agent-log') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (id) openAgentLog(id);
+      }
+      if (action === 'view-project') openProjectDetail(el.dataset.projectId);
+      if (action === 'open-task') {
+        e.preventDefault();
+        const taskId = el.dataset.taskId;
+        switchTab('tasks');
+        await openTaskDetail(taskId);
+      }
     });
 
-    el.applyTaskFilters.addEventListener('click', async () => {
-      state.taskFilters.project_id = el.filterProject.value.trim();
-      state.taskFilters.task_id = el.filterTaskId.value.trim();
-      state.taskFilters.status = el.filterStatus.value.trim();
-      state.activeTab = 'tasks';
-      await loadTasks();
-      setConn(true);
-      markRefresh();
+    refs.projectFilter.addEventListener('change', () => {
+      state.projectFilterId = refs.projectFilter.value || '';
+      persistUiState({ projectFilterId: state.projectFilterId });
+      renderTasks();
+    });
+    refs.agentSearch.addEventListener('input', (e) => {
+      state.agentSearchQuery = e.target.value.trim();
+      renderAgents();
+    });
+    if (refs.agentGroupingMode) {
+      refs.agentGroupingMode.value = state.agentGroupingMode;
+      refs.agentGroupingMode.addEventListener('change', (e) => setAgentGroupingMode(e.target.value));
+    }
+    if (refs.acpInput) {
+      refs.acpInput.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          sendAcpMessage('chat');
+        }
+      });
+    }
+    [refs.tfAgents, refs.tfProjects, refs.tfErrors, refs.tfPRs].forEach(chk => chk.addEventListener('change', renderTimeline));
+    refs.modal.addEventListener('click', (e) => {
+      if (e.target === refs.modal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
     });
 
-    el.resetTaskFilters.addEventListener('click', async () => {
-      state.taskFilters = { project_id: '', task_id: '', status: '' };
-      el.filterProject.value = '';
-      el.filterTaskId.value = '';
-      el.filterStatus.value = '';
-      state.activeTab = 'tasks';
-      await loadTasks();
-      setConn(true);
-      markRefresh();
-    });
+    (async function init() {
+      updateFilterToggleUI();
+      refs.historyAgentsPanel.classList.toggle('collapsed', state.historyPanelCollapsed);
+      refs.logPanel.classList.toggle('collapsed', state.eventLogCollapsed);
 
-    // Initial load
-    refreshActiveView();
+      await refreshCoreData();
+      setupSSE();
 
-    // Incremental updates via SSE + low-frequency polling fallback.
-    setupSse();
-    setInterval(refreshActiveView, 20000);
+      setInterval(refreshCoreData, 10000);        // API fallback without dashboard snapshot endpoint
+      setInterval(() => { if (state.activeTab === 'tasks') fetchTasks(refs.projectFilter.value); }, 15000);
+
+      renderOperations();
+      renderAgents();
+      renderProjects();
+      renderTasks();
+      renderTimeline();
+      renderEventLog();
+      switchTab(state.activeTab);
+      fetchAcpMessages();
+      fetchSubtasksQueue();
+
+      // Selected agent output polling fallback for unified Agents workspace
+      setInterval(() => {
+        if (state.acpAutoRefresh && !state.acpPaused && state.activeTab === 'agents') {
+          fetchAcpMessages();
+        }
+      }, 3000);
+
+      // Subtask queue polling
+      setInterval(fetchSubtasksQueue, 5000);
+    })();
   </script>
 </body>
 </html>
