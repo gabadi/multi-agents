@@ -2423,6 +2423,7 @@
         } catch {}
       }));
       if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperationsRail();
     }
 
     async function fetchAcpMessages() {
@@ -2437,9 +2438,11 @@
         const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/outputs?limit=200`);
         if (Array.isArray(data.messages)) setAcpOutputs(agentId, data.messages);
         if (state.activeTab === 'agents') renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
       } catch (err) {
         addEventLog('acp-output-error', `No se pudo cargar outputs de ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
         if (state.activeTab === 'agents') renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
       }
     }
 
@@ -2619,6 +2622,7 @@
       } finally {
         state.acpSending = false;
         renderAcpWorkspace();
+        if (state.activeTab === 'operations') renderOperationsRail();
       }
     }
 
