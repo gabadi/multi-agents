@@ -813,6 +813,38 @@
       margin-top: 10px;
       margin-bottom: 10px;
     }
+    .blocker-panel {
+      border: 1px solid rgba(249,115,22,.55);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(249,115,22,.1), rgba(239,68,68,.06));
+      padding: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .blocker-panel.clear {
+      border-color: rgba(34,197,94,.4);
+      background: rgba(34,197,94,.08);
+    }
+    .blocker-list {
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .blocker-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(15,17,23,.55);
+      padding: 8px;
+      font-size: 12px;
+    }
+    .blocker-item strong { margin-right: 6px; }
+    .blocker-item.sev-high { border-color: rgba(239,68,68,.5); }
+    .blocker-item.sev-medium { border-color: rgba(249,115,22,.45); }
     .ops-lane-card {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -996,6 +1028,7 @@
                 <span class="chip" id="opsProjectsCount">Projects: 0</span>
               </div>
             </div>
+            <div id="blockerPanel" class="blocker-panel clear"></div>
             <div id="opsMainGrid" class="ops-main-grid"></div>
             <div id="opsEventLogPanel" class="ops-event-log">
               <div class="ops-event-log-head">
@@ -1129,8 +1162,23 @@
 
   <script>
     const API = ''; // Rutas relativas — dashboard servido desde mismo servidor
+    const UI_STATE_KEY = 'dashboardUiStateV1';
+
+    function readUiState() {
+      try {
+        const raw = localStorage.getItem(UI_STATE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    const persistedUiState = readUiState();
+
     const state = {
-      activeTab: 'operations',
+      activeTab: persistedUiState.activeTab || 'operations',
       // Normalized entity store (v2 monitor adapters)
       agents: new Map(),
       projects: new Map(),
@@ -1146,7 +1194,7 @@
       projectEventSince: 0,
       showOnlyActive: localStorage.getItem('filterActive') === 'true',
       agentSearchQuery: '',
-      agentGroupingMode: localStorage.getItem('agentGroupingMode') || 'hierarchy',
+      agentGroupingMode: persistedUiState.agentGroupingMode || localStorage.getItem('agentGroupingMode') || 'hierarchy',
       agentGroupCollapsed: (() => {
         try {
           return JSON.parse(localStorage.getItem('agentGroupCollapsed') || '{}') || {};
@@ -1156,7 +1204,7 @@
       })(),
       acpAutoRefresh: true,
       acpPaused: false,
-      acpSelectedAgentId: localStorage.getItem('acpSelectedAgentId') || '',
+      acpSelectedAgentId: persistedUiState.acpSelectedAgentId || localStorage.getItem('acpSelectedAgentId') || '',
       acpOutputs: new Map(),
       acpHumanMessages: new Map(),
       acpPreviewRequested: new Set(),
@@ -1166,10 +1214,36 @@
       acpMessagesSignature: '',
       subtasksQueue: { ready: [], running: [], blocked: [], counts: { ready: 0, running: 0, blocked: 0 } },
       operationsLane: 'coordinators',
-      operationsSelection: { type: 'project', projectId: null, taskId: null, subtaskId: null },
-      operationsExpandedProjects: {},
-      operationsLogCollapsed: false,
+      operationsSelection: (() => {
+        const raw = persistedUiState.operationsSelection;
+        if (!raw || typeof raw !== 'object') return { type: 'project', projectId: null, taskId: null, subtaskId: null };
+        return {
+          type: ['project', 'task', 'subtask'].includes(raw.type) ? raw.type : 'project',
+          projectId: Number.isFinite(Number(raw.projectId)) ? Number(raw.projectId) : null,
+          taskId: Number.isFinite(Number(raw.taskId)) ? Number(raw.taskId) : null,
+          subtaskId: Number.isFinite(Number(raw.subtaskId)) ? Number(raw.subtaskId) : null,
+        };
+      })(),
+      operationsExpandedProjects: (persistedUiState.operationsExpandedProjects && typeof persistedUiState.operationsExpandedProjects === 'object')
+        ? persistedUiState.operationsExpandedProjects
+        : {},
+      operationsLogCollapsed: Boolean(persistedUiState.operationsLogCollapsed),
+      projectFilterId: persistedUiState.projectFilterId ? String(persistedUiState.projectFilterId) : '',
+      historyPanelCollapsed: persistedUiState.historyPanelCollapsed !== false,
+      eventLogCollapsed: Boolean(persistedUiState.eventLogCollapsed),
+      staleThresholds: {
+        taskMs: 20 * 60 * 1000,
+        subtaskMs: 15 * 60 * 1000,
+        waitingMs: 2 * 60 * 1000,
+        agentIdleMs: 8 * 60 * 1000,
+      },
+      blockers: [],
     };
+
+    function persistUiState(patch = {}) {
+      const next = { ...readUiState(), ...patch };
+      try { localStorage.setItem(UI_STATE_KEY, JSON.stringify(next)); } catch {}
+    }
 
     const refs = {
       historyAgentsGrid: document.getElementById('historyAgentsGrid'),
@@ -1203,6 +1277,7 @@
       subtaskRunningTable: document.getElementById('subtaskRunningTable'),
       opsNavList: document.getElementById('opsNavList'),
       opsMainGrid: document.getElementById('opsMainGrid'),
+      blockerPanel: document.getElementById('blockerPanel'),
       opsAgentTotal: document.getElementById('opsAgentTotal'),
       opsTasksCount: document.getElementById('opsTasksCount'),
       opsProjectsCount: document.getElementById('opsProjectsCount'),
@@ -1629,6 +1704,7 @@
       const valid = new Set(['hierarchy', 'role', 'status', 'lifecycle']);
       state.agentGroupingMode = valid.has(mode) ? mode : 'hierarchy';
       localStorage.setItem('agentGroupingMode', state.agentGroupingMode);
+      persistUiState({ agentGroupingMode: state.agentGroupingMode });
       if (refs.agentGroupingMode && refs.agentGroupingMode.value !== state.agentGroupingMode) {
         refs.agentGroupingMode.value = state.agentGroupingMode;
       }
@@ -1957,6 +2033,150 @@
       logBody.scrollTop = logBody.scrollHeight;
     }
 
+    function toEpochMs(value) {
+      if (value == null || value === '') return 0;
+      if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+      const ms = Date.parse(String(value));
+      return Number.isFinite(ms) ? ms : 0;
+    }
+
+    function fmtDuration(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+
+    function collectBlockersAndStaleSignals() {
+      const now = Date.now();
+      const alerts = [];
+      const thresholds = state.staleThresholds;
+
+      for (const agent of state.agents.values()) {
+        const status = agentStatus(agent);
+        const lastSeenMs = toEpochMs(agent.last_seen_at);
+        const sinceSeen = lastSeenMs ? (now - lastSeenMs) : 0;
+        if (status === 'blocked' || status === 'error') {
+          alerts.push({
+            key: `agent:${agent.agent_id}:${status}`,
+            severity: 'high',
+            type: 'agent',
+            label: `${agent.agent_id} ${status}`,
+            detail: `status=${status} last_seen=${agent.last_seen_at || '--'}`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        } else if ((status === 'waiting_response' || status === 'waiting_llm') && sinceSeen > thresholds.waitingMs) {
+          alerts.push({
+            key: `agent:${agent.agent_id}:waiting`,
+            severity: 'medium',
+            type: 'agent',
+            label: `${agent.agent_id} waiting too long`,
+            detail: `waiting for ${fmtDuration(sinceSeen)} (${status})`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        } else if (agent.process_alive && status !== 'offline' && sinceSeen > thresholds.agentIdleMs) {
+          alerts.push({
+            key: `agent:${agent.agent_id}:stale`,
+            severity: 'medium',
+            type: 'agent',
+            label: `${agent.agent_id} stale heartbeat`,
+            detail: `no heartbeat for ${fmtDuration(sinceSeen)}`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        }
+      }
+
+      for (const task of state.tasks.values()) {
+        const taskStatus = String(task.status || 'planned');
+        const updatedMs = toEpochMs(task.updated_at || task.modified_at || task.last_transition_at || task.created_at);
+        const age = updatedMs ? now - updatedMs : 0;
+        if (taskStatus === 'blocked') {
+          alerts.push({
+            key: `task:${task.id}:blocked`,
+            severity: 'high',
+            type: 'task',
+            label: `Task #${task.id} blocked`,
+            detail: `${task.title || 'untitled'} · updated ${task.updated_at || '--'}`,
+            action: { type: 'task', task_id: task.id, project_id: task.project_id },
+          });
+        } else if (['in_progress', 'ready_for_validation', 'ready_for_pr', 'pr_open'].includes(taskStatus) && age > thresholds.taskMs) {
+          alerts.push({
+            key: `task:${task.id}:stale-progress`,
+            severity: 'medium',
+            type: 'task',
+            label: `Task #${task.id} stale-progress`,
+            detail: `${task.title || 'untitled'} · no progress for ${fmtDuration(age)}`,
+            action: { type: 'task', task_id: task.id, project_id: task.project_id },
+          });
+        }
+      }
+
+      for (const subtask of state.subtasks.values()) {
+        const subtaskStatus = String(subtask.status || 'pending');
+        const updatedMs = toEpochMs(subtask.updated_at || subtask.modified_at || subtask.last_transition_at || subtask.created_at);
+        const age = updatedMs ? now - updatedMs : 0;
+        const parentTask = state.tasks.get(Number(subtask.task_id));
+        const projectId = parentTask?.project_id;
+        if (subtaskStatus === 'blocked') {
+          alerts.push({
+            key: `subtask:${subtask.id}:blocked`,
+            severity: 'high',
+            type: 'subtask',
+            label: `Subtask #${subtask.id} blocked`,
+            detail: `${subtask.title || subtask.text || 'subtask'} · task #${subtask.task_id || '--'}`,
+            action: { type: 'subtask', subtask_id: subtask.id, task_id: subtask.task_id, project_id: projectId },
+          });
+        } else if (['running', 'in_progress', 'assigned'].includes(subtaskStatus) && age > thresholds.subtaskMs) {
+          alerts.push({
+            key: `subtask:${subtask.id}:stale-progress`,
+            severity: 'medium',
+            type: 'subtask',
+            label: `Subtask #${subtask.id} stale-progress`,
+            detail: `no update for ${fmtDuration(age)} · task #${subtask.task_id || '--'}`,
+            action: { type: 'subtask', subtask_id: subtask.id, task_id: subtask.task_id, project_id: projectId },
+          });
+        }
+      }
+
+      const unique = new Map();
+      for (const alert of alerts) if (!unique.has(alert.key)) unique.set(alert.key, alert);
+      state.blockers = [...unique.values()].sort((a, b) => {
+        if (a.severity === b.severity) return String(a.label).localeCompare(String(b.label));
+        return a.severity === 'high' ? -1 : 1;
+      });
+    }
+
+    function renderBlockerPanel() {
+      if (!refs.blockerPanel) return;
+      collectBlockersAndStaleSignals(); // stale-progress detection logic
+      const alerts = state.blockers;
+      if (!alerts.length) {
+        refs.blockerPanel.classList.add('clear');
+        refs.blockerPanel.innerHTML = `<div><strong>✅ Blockers / stale signals</strong> <span class="muted">none detected</span></div>`;
+        return;
+      }
+      refs.blockerPanel.classList.remove('clear');
+      refs.blockerPanel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <strong>⚠ Blocker / stale work panel</strong>
+          <span class="chip">${alerts.length} alerts</span>
+        </div>
+        <ul class="blocker-list">
+          ${alerts.slice(0, 40).map((alert) => `
+            <li class="blocker-item sev-${alert.severity}">
+              <strong>${escapeHtml(alert.label)}</strong>
+              <span class="muted">${escapeHtml(alert.detail || '')}</span>
+              ${alert.action?.type === 'task' ? ` · <a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(alert.action.task_id)}" data-project-id="${escapeHtml(alert.action.project_id || '')}">open task</a>` : ''}
+              ${alert.action?.type === 'subtask' ? ` · <a href="#" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(alert.action.subtask_id)}" data-task-id="${escapeHtml(alert.action.task_id || '')}" data-project-id="${escapeHtml(alert.action.project_id || '')}">open subtask</a>` : ''}
+              ${alert.action?.type === 'agent' ? ` · <a href="#" data-action="select-acp-agent" data-agent-id="${escapeHtml(alert.action.agent_id)}">open agent</a>` : ''}
+            </li>`).join('')}
+        </ul>
+      `;
+    }
+
     function operationsLaneBuckets() {
       const agents = [...state.agents.values()];
       const coordinators = agents.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
@@ -2090,6 +2310,10 @@
       } else {
         state.operationsSelection = { type: 'project', projectId: null, taskId: null, subtaskId: null };
       }
+      persistUiState({
+        operationsSelection: state.operationsSelection,
+        operationsExpandedProjects: state.operationsExpandedProjects,
+      });
     }
 
     function renderOperationsTree(projects = []) {
@@ -2325,6 +2549,7 @@
 
       renderOperationsTree(projects);
       renderOperationsDetail();
+      renderBlockerPanel();
 
       renderOperationsRail();
       renderOperationsEventLog();
@@ -2352,7 +2577,10 @@
         return String(a.agent_id).localeCompare(String(b.agent_id));
       });
       state.acpSelectedAgentId = all[0]?.agent_id || '';
-      if (state.acpSelectedAgentId) localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+      if (state.acpSelectedAgentId) {
+        localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
+      }
       return state.acpSelectedAgentId;
     }
 
@@ -2663,17 +2891,26 @@
     }
 
     function populateProjectFilter() {
-      const current = refs.projectFilter.value;
+      const current = refs.projectFilter.value || state.projectFilterId || '';
       const opts = ['<option value="">Todos</option>']
         .concat([...state.projects.values()].sort((a,b)=>a.id-b.id).map(p =>
           `<option value="${escapeHtml(p.id)}">${escapeHtml((p.code || `p${p.id}`) + ' - ' + (p.name || ''))}</option>`
         ));
       refs.projectFilter.innerHTML = opts.join('');
-      if ([...refs.projectFilter.options].some(o => o.value === current)) refs.projectFilter.value = current;
+      if ([...refs.projectFilter.options].some(o => o.value === current)) {
+        refs.projectFilter.value = current;
+        state.projectFilterId = current;
+      } else {
+        refs.projectFilter.value = '';
+        state.projectFilterId = '';
+      }
+      persistUiState({ projectFilterId: state.projectFilterId });
     }
 
     function switchTab(tab) {
-      state.activeTab = tab;
+      const validTabs = new Set(['operations','agents','projects','tasks','timeline','subtasks']);
+      state.activeTab = validTabs.has(tab) ? tab : 'operations';
+      persistUiState({ activeTab: state.activeTab });
       document.querySelectorAll('.tab-btn').forEach((b) => {
         b.classList.toggle('active', b.dataset.tab === tab);
       });
@@ -3001,6 +3238,82 @@
       );
     }
 
+    function mergeTaskPatchFromEvent(payload = {}) {
+      const id = Number(payload.task_id ?? payload.id ?? payload.taskId);
+      if (!Number.isFinite(id)) return null;
+      const prev = state.tasks.get(id) || { id };
+      const patch = {
+        ...prev,
+        id,
+        task_id: id,
+        status: payload.status ?? prev.status,
+        title: payload.title ?? prev.title,
+        project_id: Number(payload.project_id ?? prev.project_id),
+        updated_at: payload.updated_at ?? payload.ts ?? new Date().toISOString(),
+      };
+      return patch;
+    }
+
+    function applyRealtimeEntityEvent(eventName, payload) {
+      const lower = String(eventName || '').toLowerCase();
+
+      if (lower.includes('project')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const projectId = Number(payload?.project_id ?? payload?.id);
+          if (Number.isFinite(projectId)) removeProject(projectId);
+        } else {
+          const project = payload?.project || payload;
+          if (project) upsertProject(project);
+        }
+      }
+
+      if (lower.includes('task')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const taskId = Number(payload?.task_id ?? payload?.id ?? payload?.task?.id);
+          if (Number.isFinite(taskId)) removeTask(taskId);
+        } else {
+          const task = payload?.task || payload?.task_row || payload?.data?.task || payload;
+          if (task && (task.id != null || task.task_id != null)) upsertTask(task);
+          else {
+            const patch = mergeTaskPatchFromEvent(payload);
+            if (patch) upsertTask(patch);
+          }
+        }
+      }
+
+      if (lower.includes('subtask')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const subtaskId = Number(payload?.subtask_id ?? payload?.id);
+          if (Number.isFinite(subtaskId)) state.subtasks.delete(subtaskId);
+        } else {
+          const subtask = payload?.subtask || payload?.data?.subtask || payload;
+          const mergedSubtask = upsertSubtask(subtask, { taskId: Number(payload?.task_id ?? subtask?.task_id) });
+          if (mergedSubtask?.task_id != null) {
+            const taskId = Number(mergedSubtask.task_id);
+            const task = state.tasks.get(taskId);
+            if (task) {
+              task.subtasks = materializeTaskSubtasks(taskId);
+              task._lastSnapshot = Date.now();
+              state.tasks.set(taskId, task);
+            }
+          }
+        }
+      }
+
+      if (lower.includes('agent-associated') || lower.includes('agent-assigned')) {
+        const taskId = Number(payload?.task_id);
+        if (Number.isFinite(taskId) && state.tasks.has(taskId)) {
+          const t = { ...state.tasks.get(taskId) };
+          t.agent_ids = Array.from(new Set([...(t.agent_ids || []), ...(payload.agent_ids || []), payload.agent_id].filter(Boolean)));
+          upsertTask(t);
+        }
+      }
+
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'operations') renderOperations();
+    }
+
     function setupSSE() {
       const es = new EventSource(`${API}/api/stream`);
 
@@ -3056,24 +3369,19 @@
         }
       });
 
-      ['task-update','task-created','subtask-update'].forEach(name => {
+      const realtimeEntityEvents = [
+        'task-created','task-create','task-updated','task-update','task-status-changed','task-deleted','task-removed',
+        'subtask-created','subtask-update','subtask-updated','subtask-status-changed','subtask-deleted','subtask-removed',
+        'project-created','project-updated','project-status-changed','project-deleted','project-removed',
+        'agent-associated','agent-assigned'
+      ];
+      for (const name of realtimeEntityEvents) {
         es.addEventListener(name, (ev) => {
           const payload = parse(ev.data);
-          const task = payload?.task || payload;
-          upsertTask(task);
-          addEventLog(name, `Task ${task?.id || payload?.id || ''} ${name}`, payload, 'project');
+          applyRealtimeEntityEvent(name, payload); // incremental SSE updates
+          addEventLog(name, `Realtime ${name}`, payload, 'project');
         });
-      });
-
-      es.addEventListener('agent-associated', (ev) => {
-        const payload = parse(ev.data);
-        if (payload?.task_id && state.tasks.has(Number(payload.task_id))) {
-          const t = { ...state.tasks.get(Number(payload.task_id)) };
-          t.agent_ids = Array.from(new Set([...(t.agent_ids || []), ...(payload.agent_ids || []), payload.agent_id].filter(Boolean)));
-          upsertTask(t);
-        }
-        addEventLog('agent-associated', `Asociación task/agente`, payload, 'project');
-      });
+      }
 
       es.addEventListener('log-event', (ev) => {
         const payload = parse(ev.data);
@@ -3132,7 +3440,11 @@
       const action = el.dataset.action;
       if (action === 'close-modal') closeModal();
 
-      if (action === 'toggle-log-collapse') refs.logPanel.classList.toggle('collapsed');
+      if (action === 'toggle-log-collapse') {
+        refs.logPanel.classList.toggle('collapsed');
+        state.eventLogCollapsed = refs.logPanel.classList.contains('collapsed');
+        persistUiState({ eventLogCollapsed: state.eventLogCollapsed });
+      }
       if (action === 'toggle-log-pause') {
         state.logPaused = !state.logPaused;
         el.textContent = state.logPaused ? 'Reanudar' : 'Pausar';
@@ -3161,6 +3473,10 @@
         if (Number.isFinite(projectId)) {
           state.operationsExpandedProjects[projectId] = state.operationsExpandedProjects[projectId] === false;
           state.operationsSelection = { type: 'project', projectId, taskId: null, subtaskId: null };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
           renderOperations();
         }
         return;
@@ -3173,6 +3489,10 @@
         if (Number.isFinite(taskId)) {
           if (Number.isFinite(projectId)) state.operationsExpandedProjects[projectId] = true;
           state.operationsSelection = { type: 'task', projectId: Number.isFinite(projectId) ? projectId : null, taskId, subtaskId: null };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
           renderOperations();
         }
         return;
@@ -3191,6 +3511,10 @@
             taskId: Number.isFinite(taskId) ? taskId : null,
             subtaskId,
           };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
           renderOperations();
         }
         return;
@@ -3198,6 +3522,7 @@
 
       if (action === 'toggle-ops-log') {
         state.operationsLogCollapsed = !state.operationsLogCollapsed;
+        persistUiState({ operationsLogCollapsed: state.operationsLogCollapsed });
         renderOperationsEventLog();
         el.textContent = state.operationsLogCollapsed ? 'Expand' : 'Collapse';
         return;
@@ -3211,6 +3536,7 @@
       if (action === 'select-agent-card' || action === 'select-acp-agent') {
         state.acpSelectedAgentId = el.dataset.agentId || '';
         localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
         renderAgents();
         if (state.activeTab === 'operations') renderOperationsRail();
         fetchAcpMessages();
@@ -3229,6 +3555,7 @@
         if (!text) return;
         state.acpSelectedAgentId = agentId;
         localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
         await sendAcpMessage('chat', { text });
         if (input) input.value = '';
         renderOperationsRail();
@@ -3277,6 +3604,8 @@
 
       if (action === 'toggle-history') {
         refs.historyAgentsPanel.classList.toggle('collapsed');
+        state.historyPanelCollapsed = refs.historyAgentsPanel.classList.contains('collapsed');
+        persistUiState({ historyPanelCollapsed: state.historyPanelCollapsed });
       }
 
       if (action === 'purge-offline') {
@@ -3307,7 +3636,11 @@
       }
     });
 
-    refs.projectFilter.addEventListener('change', () => renderTasks());
+    refs.projectFilter.addEventListener('change', () => {
+      state.projectFilterId = refs.projectFilter.value || '';
+      persistUiState({ projectFilterId: state.projectFilterId });
+      renderTasks();
+    });
     refs.agentSearch.addEventListener('input', (e) => {
       state.agentSearchQuery = e.target.value.trim();
       renderAgents();
@@ -3334,6 +3667,9 @@
 
     (async function init() {
       updateFilterToggleUI();
+      refs.historyAgentsPanel.classList.toggle('collapsed', state.historyPanelCollapsed);
+      refs.logPanel.classList.toggle('collapsed', state.eventLogCollapsed);
+
       await refreshCoreData();
       setupSSE();
 
@@ -3346,6 +3682,7 @@
       renderTasks();
       renderTimeline();
       renderEventLog();
+      switchTab(state.activeTab);
       fetchAcpMessages();
       fetchSubtasksQueue();
 
