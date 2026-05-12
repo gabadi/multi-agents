@@ -2213,7 +2213,7 @@ function getActiveCoordinators(): ActiveCoordinatorRoutingSnapshot[] {
 
 function getActiveProjects(): ActiveProjectRoutingSnapshot[] {
   return getProjects({ status: "active" }).map((p) => ({
-    project_id: p.project_id,
+    project_id: p.id,
     name: p.name,
     status: p.status,
     short_title: String(p.name || "").slice(0, 80),
@@ -2539,7 +2539,7 @@ function serveApiProjectsSummary(res: ServerResponse, url: URL) {
     const projects = getProjects(filters);
 
     const summary = projects.map((project) => {
-      const tasks = getTasks({ project_id: project.project_id, include_subtasks: true });
+      const tasks = getTasks({ project_id: project.id, include_subtasks: true });
       const statuses = tasks.reduce<Record<string, number>>((acc, task) => {
         acc[task.status] = (acc[task.status] ?? 0) + 1;
         return acc;
@@ -2547,7 +2547,7 @@ function serveApiProjectsSummary(res: ServerResponse, url: URL) {
       const ownership = Array.from(new Set(tasks.flatMap((task) => task.agent_ids).filter(Boolean)));
       const subtasks = tasks.flatMap((task) => task.subtasks ?? []);
       return {
-        project_id: project.project_id,
+        project_id: project.id,
         name: project.name,
         status: project.status,
         repo_url: project.repo_url,

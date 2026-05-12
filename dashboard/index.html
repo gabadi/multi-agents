@@ -1929,6 +1929,20 @@
             ${Object.entries(counts).map(([k,v]) => `<span class="pill">${escapeHtml(k)}: ${escapeHtml(v)}</span>`).join('')}
           </div>
 
+          ${(p.owner_agent_ids || []).length ? `
+          <div style="margin-top:8px;padding:6px;background:rgba(59,130,246,.08);border-left:2px solid var(--blue);border-radius:4px;">
+            <div class="muted" style="font-size:11px;margin-bottom:4px;">Agentes:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${(p.owner_agent_ids || []).map(aid => {
+                const ag = state.agents.get(aid);
+                const alive = ag?.process_alive;
+                const color = alive ? 'var(--green)' : 'var(--red)';
+                return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'alive' : 'offline'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</span>`;
+              }).join('')}
+            </div>
+          </div>
+          ` : ''}
+
           <div class="muted">Progress ${done}/${total} (${pct}%)</div>
           <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
 
