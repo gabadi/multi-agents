@@ -430,6 +430,19 @@
     .agent-category-panel.collapsed .agent-category-toggle-icon { transform: rotate(0deg); }
     .agent-category-panel.collapsed .agent-category-body { display: none; }
     .agent-category-body { min-width: 0; }
+    .agent-group-note {
+      margin-left: auto;
+      margin-right: 10px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--muted);
+    }
+    .agent-section.alert {
+      border-color: rgba(249,115,22,.55);
+      box-shadow: inset 0 0 0 1px rgba(249,115,22,.2);
+    }
     .agent-lane {
       margin-bottom: 0;
       padding: 12px;
@@ -752,10 +765,46 @@
       margin-top: 10px;
       margin-bottom: 10px;
     }
+    .ops-task-detail-panel {
+      border: 1px solid rgba(6,182,212,.45);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(6,182,212,.08), rgba(6,182,212,.02));
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ops-task-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
     .ops-detail-subtasks {
       display: flex;
       flex-direction: column;
       gap: 6px;
+    }
+    .ops-detail-kv {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 10px;
+      font-size: 12px;
+    }
+    .ops-detail-error {
+      border: 1px solid rgba(239,68,68,.5);
+      border-radius: 8px;
+      background: rgba(239,68,68,.1);
+      color: #fecaca;
+      padding: 8px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ops-detail-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
     }
     .ops-main-grid {
       display: grid;
@@ -805,6 +854,14 @@
       max-height: calc(100vh - 300px);
       overflow: auto;
     }
+    .ops-agent-rail { display: flex; flex-direction: column; gap: 8px; }
+    .ops-agent-header { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 10px; }
+    .ops-agent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .ops-agent-messages { border: 1px solid var(--border); border-radius: 10px; background: rgba(15,17,23,.58); padding: 8px; max-height: 38vh; overflow: auto; display:flex; flex-direction:column; gap:8px; }
+    .ops-agent-composer { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 8px; display:flex; flex-direction:column; gap:8px; }
+    .ops-agent-input { min-height: 88px; resize: vertical; }
+    .ops-link { color: var(--cyan); text-decoration: none; }
+    .ops-link:hover { text-decoration: underline; }
 
     .log-panel {
       border-top: 1px solid var(--border);
@@ -880,6 +937,7 @@
     @media (max-width: 600px) {
       .grid { grid-template-columns: 1fr; }
       .ops-main-grid { grid-template-columns: 1fr; }
+      .ops-detail-kv { grid-template-columns: 1fr; }
       .topbar { align-items: flex-start; flex-direction: column; }
       .status-line { justify-content: flex-start; }
       .kanban { overflow-x: auto; }
@@ -965,41 +1023,17 @@
           <section class="agents-inventory">
             <div class="agent-controls">
               <div class="stats-bar" id="agentStatsBar"></div>
+              <label class="muted" for="agentGroupingMode">Group by</label>
+              <select id="agentGroupingMode" title="Agent inventory grouping mode">
+                <option value="hierarchy">Hierarchy</option>
+                <option value="role">Role</option>
+                <option value="status">Status</option>
+                <option value="lifecycle">Lifecycle</option>
+              </select>
               <input type="search" id="agentSearch" class="agent-search" placeholder="🔍 Filtrar agentes..." />
             </div>
 
-            <div class="agent-section agent-category-panel" id="coordinatorsSection" data-category="coordinators">
-              <button class="agent-category-header" data-action="toggle-agent-category" data-category="coordinators" aria-expanded="true">
-                <span class="agent-category-toggle-icon">▶</span>
-                <span class="agent-category-title">👑 Coordinators</span>
-                <span id="coordinatorsCount" class="muted" style="margin-left:auto;">(0)</span>
-              </button>
-              <div class="agent-category-body">
-                <div id="coordinatorsGrid" class="agent-lane"></div>
-              </div>
-            </div>
-
-            <div class="agent-section agent-category-panel" id="workersActiveSection" data-category="running">
-              <button class="agent-category-header" data-action="toggle-agent-category" data-category="running" aria-expanded="true">
-                <span class="agent-category-toggle-icon">▶</span>
-                <span class="agent-category-title">⚡ Running</span>
-                <span id="workersActiveCount" class="muted" style="margin-left:auto;">(0)</span>
-              </button>
-              <div class="agent-category-body">
-                <div id="workersActiveGrid" class="agent-lane"></div>
-              </div>
-            </div>
-
-            <div class="agent-section agent-category-panel" id="workersIdleSection" data-category="idle">
-              <button class="agent-category-header" data-action="toggle-agent-category" data-category="idle" aria-expanded="true">
-                <span class="agent-category-toggle-icon">▶</span>
-                <span class="agent-category-title">💤 Idle</span>
-                <span id="workersIdleCount" class="muted" style="margin-left:auto;">(0)</span>
-              </button>
-              <div class="agent-category-body">
-                <div id="workersIdleGrid" class="agent-lane"></div>
-              </div>
-            </div>
+            <div id="agentGroupedSections"></div>
 
             <div id="historyAgentsPanel" class="history-panel collapsed">
               <div class="history-header" data-action="toggle-history">
@@ -1112,16 +1146,12 @@
       projectEventSince: 0,
       showOnlyActive: localStorage.getItem('filterActive') === 'true',
       agentSearchQuery: '',
-      agentCategoryCollapsed: (() => {
+      agentGroupingMode: localStorage.getItem('agentGroupingMode') || 'hierarchy',
+      agentGroupCollapsed: (() => {
         try {
-          const parsed = JSON.parse(localStorage.getItem('agentCategoryCollapsed') || '{}');
-          return {
-            coordinators: Boolean(parsed.coordinators),
-            running: Boolean(parsed.running),
-            idle: Boolean(parsed.idle),
-          };
+          return JSON.parse(localStorage.getItem('agentGroupCollapsed') || '{}') || {};
         } catch {
-          return { coordinators: false, running: false, idle: false };
+          return {};
         }
       })(),
       acpAutoRefresh: true,
@@ -1161,15 +1191,8 @@
       tfProjects: document.getElementById('tfProjects'),
       tfErrors: document.getElementById('tfErrors'),
       tfPRs: document.getElementById('tfPRs'),
-      coordinatorsSection: document.getElementById('coordinatorsSection'),
-      workersActiveSection: document.getElementById('workersActiveSection'),
-      workersIdleSection: document.getElementById('workersIdleSection'),
-      coordinatorsGrid: document.getElementById('coordinatorsGrid'),
-      workersActiveGrid: document.getElementById('workersActiveGrid'),
-      workersIdleGrid: document.getElementById('workersIdleGrid'),
-      coordinatorsCount: document.getElementById('coordinatorsCount'),
-      workersActiveCount: document.getElementById('workersActiveCount'),
-      workersIdleCount: document.getElementById('workersIdleCount'),
+      agentGroupedSections: document.getElementById('agentGroupedSections'),
+      agentGroupingMode: document.getElementById('agentGroupingMode'),
       agentStatsBar: document.getElementById('agentStatsBar'),
       agentSearch: document.getElementById('agentSearch'),
       acpHeader: document.getElementById('acpHeader'),
@@ -1552,11 +1575,12 @@
         ? `<div class="agent-card-preview"><strong>Preview:</strong> ${escapeHtml(preview.slice(0, 160))}${preview.length > 160 ? '…' : ''}</div>`
         : '';
       const activityLabel = a.activity_label || fallbackActivityLabel(a);
+      const depthPrefix = Number(a._hierarchy_depth || 0) > 0 ? `${'↳ '.repeat(Math.min(Number(a._hierarchy_depth || 0), 4))}` : '';
       return `
         <article class="card agent-card ${coordClass} ${selected ? 'selected' : ''}" style="${isDead ? 'opacity:.65;' : ''}" data-action="select-agent-card" data-agent-id="${escapeHtml(a.agent_id)}">
           <div class="card-header">
             <div>
-              <h3 class="card-title">${escapeHtml(getAgentDisplayName(a))} ${isCoordinator ? '<span style="color:var(--orange)">👑</span>' : ''}</h3>
+              <h3 class="card-title">${escapeHtml(depthPrefix)}${escapeHtml(getAgentDisplayName(a))} ${isCoordinator ? '<span style="color:var(--orange)">👑</span>' : ''}</h3>
               <div class="muted">${escapeHtml(a.display_role || a.role || 'agent')} ${isDead ? '<span style="color:var(--red)">● muerto</span>' : ''}${selected ? ' · <span style="color:var(--cyan)">seleccionado</span>' : ''}</div>
             </div>
             ${agentBadge(s)}
@@ -1570,6 +1594,8 @@
             <div class="meta-row"><b>mailbox:</b> ${escapeHtml(a.mailbox_pending ?? a.mailbox_size ?? '--')} bytes</div>
             <div class="meta-row"><b>activity:</b> ${escapeHtml(activityLabel)}</div>
             <div class="meta-row"><b>pending corr:</b> ${escapeHtml(pendingCorr)}</div>
+            <div class="meta-row"><b>parent:</b> ${escapeHtml(a.parent_agent_id || '--')}</div>
+            <div class="meta-row"><b>depth:</b> ${escapeHtml(a._hierarchy_depth ?? 0)}</div>
           </div>
           ${contextHtml}
           ${previewHtml}
@@ -1588,30 +1614,25 @@
       return hay.includes(q.toLowerCase());
     }
 
-    function persistAgentCategoryState() {
-      localStorage.setItem('agentCategoryCollapsed', JSON.stringify(state.agentCategoryCollapsed));
+    function persistAgentGroupState() {
+      localStorage.setItem('agentGroupCollapsed', JSON.stringify(state.agentGroupCollapsed || {}));
     }
 
-    function setAgentCategoryCollapsed(category, collapsed) {
-      if (!Object.prototype.hasOwnProperty.call(state.agentCategoryCollapsed, category)) return;
-      state.agentCategoryCollapsed[category] = Boolean(collapsed);
-      persistAgentCategoryState();
-      applyAgentCategoryState();
+    function setAgentGroupCollapsed(groupKey, collapsed) {
+      if (!groupKey) return;
+      state.agentGroupCollapsed[groupKey] = Boolean(collapsed);
+      persistAgentGroupState();
+      renderAgents();
     }
 
-    function applyAgentCategoryState() {
-      const mapping = [
-        ['coordinators', refs.coordinatorsSection],
-        ['running', refs.workersActiveSection],
-        ['idle', refs.workersIdleSection],
-      ];
-      for (const [key, section] of mapping) {
-        if (!section) continue;
-        const collapsed = Boolean(state.agentCategoryCollapsed[key]);
-        section.classList.toggle('collapsed', collapsed);
-        const header = section.querySelector('.agent-category-header');
-        if (header) header.setAttribute('aria-expanded', String(!collapsed));
+    function setAgentGroupingMode(mode) {
+      const valid = new Set(['hierarchy', 'role', 'status', 'lifecycle']);
+      state.agentGroupingMode = valid.has(mode) ? mode : 'hierarchy';
+      localStorage.setItem('agentGroupingMode', state.agentGroupingMode);
+      if (refs.agentGroupingMode && refs.agentGroupingMode.value !== state.agentGroupingMode) {
+        refs.agentGroupingMode.value = state.agentGroupingMode;
       }
+      renderAgents();
     }
 
     function renderLaneCards(list = []) {
@@ -1621,46 +1642,172 @@
       return list.map(agentCard).join('');
     }
 
+    function getHierarchyGroups(liveAgents = []) {
+      const byId = new Map(liveAgents.map((a) => [a.agent_id, a]));
+      const parentToChildren = new Map();
+      const orphans = [];
+
+      for (const agent of liveAgents) {
+        const parentId = agent.parent_agent_id;
+        if (!parentId) continue;
+        if (!byId.has(parentId)) {
+          orphans.push(agent);
+          continue;
+        }
+        const arr = parentToChildren.get(parentId) || [];
+        arr.push(agent);
+        parentToChildren.set(parentId, arr);
+      }
+
+      const roots = liveAgents
+        .filter((a) => !a.parent_agent_id || !byId.has(a.parent_agent_id))
+        .filter((a) => !orphans.includes(a))
+        .sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+
+      const visited = new Set();
+      function collectBranch(root) {
+        const ordered = [];
+        const stack = [{ node: root, depth: 0 }];
+        while (stack.length) {
+          const { node, depth } = stack.pop();
+          if (!node || visited.has(node.agent_id)) continue;
+          visited.add(node.agent_id);
+          ordered.push({ ...node, _hierarchy_depth: depth });
+          const kids = (parentToChildren.get(node.agent_id) || []).sort((a,b) => a.agent_id.localeCompare(b.agent_id));
+          for (let i = kids.length - 1; i >= 0; i -= 1) stack.push({ node: kids[i], depth: depth + 1 });
+        }
+        return ordered;
+      }
+
+      const groups = roots.map((root) => {
+        const branch = collectBranch(root);
+        return {
+          key: `hier-root-${root.agent_id}`,
+          title: `🌳 Root ${root.agent_id}`,
+          note: `${branch.length} agents`,
+          agents: branch,
+          tone: 'normal',
+        };
+      });
+
+      if (orphans.length) {
+        groups.unshift({
+          key: 'hier-orphans',
+          title: '🧩 Orphaned agents (missing parent)',
+          note: 'Check parent_agent_id mapping',
+          agents: orphans.sort((a,b) => a.agent_id.localeCompare(b.agent_id)).map((a) => ({ ...a, _hierarchy_depth: 0 })),
+          tone: 'alert',
+        });
+      }
+
+      const blocked = liveAgents.filter((a) => ['blocked', 'error'].includes(agentStatus(a))).sort((a,b) => a.agent_id.localeCompare(b.agent_id));
+      if (blocked.length) {
+        groups.unshift({
+          key: 'hier-blocked',
+          title: '⚠ Blocked / Error',
+          note: 'High attention',
+          agents: blocked.map((a) => ({ ...a, _hierarchy_depth: 0 })),
+          tone: 'alert',
+        });
+      }
+
+      return groups;
+    }
+
+    function getRoleGroups(liveAgents = []) {
+      const byRole = new Map();
+      for (const agent of liveAgents) {
+        const role = agent.role || 'unknown';
+        const arr = byRole.get(role) || [];
+        arr.push(agent);
+        byRole.set(role, arr);
+      }
+      return [...byRole.entries()]
+        .sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([role, agents]) => ({
+          key: `role-${role}`,
+          title: `🧭 Role: ${role}`,
+          note: `${agents.length} agents`,
+          agents: agents.sort((x,y) => x.agent_id.localeCompare(y.agent_id)),
+          tone: role.includes('coordinator') ? 'normal' : 'normal',
+        }));
+    }
+
+    function getStatusGroups(liveAgents = []) {
+      const byStatus = new Map();
+      for (const agent of liveAgents) {
+        const status = agentStatus(agent);
+        const arr = byStatus.get(status) || [];
+        arr.push(agent);
+        byStatus.set(status, arr);
+      }
+      return [...byStatus.entries()]
+        .sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([status, agents]) => ({
+          key: `status-${status}`,
+          title: `📶 Status: ${status}`,
+          note: `${agents.length} agents`,
+          agents: agents.sort((x,y) => x.agent_id.localeCompare(y.agent_id)),
+          tone: (status === 'blocked' || status === 'error') ? 'alert' : 'normal',
+        }));
+    }
+
+    function getLifecycleGroups(liveAgents = []) {
+      const coordinators = liveAgents.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const workers = liveAgents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator');
+      const activeWorkers = workers.filter(a => WORKER_BUSY.has(a.fabric_status) || a.fabric_status === 'error' || a.fabric_status === 'blocked');
+      const idleWorkers = workers.filter(a => !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'error' && a.fabric_status !== 'blocked');
+      return [
+        { key: 'life-coordinators', title: '👑 Coordinators', note: `${coordinators.length} agents`, agents: coordinators, tone: 'normal' },
+        { key: 'life-running', title: '⚡ Running / Hot', note: `${activeWorkers.length} agents`, agents: activeWorkers, tone: 'normal' },
+        { key: 'life-idle', title: '💤 Idle', note: `${idleWorkers.length} agents`, agents: idleWorkers, tone: 'normal' },
+      ];
+    }
+
+    function getGroupedSections(liveAgents = []) {
+      if (state.agentGroupingMode === 'role') return getRoleGroups(liveAgents);
+      if (state.agentGroupingMode === 'status') return getStatusGroups(liveAgents);
+      if (state.agentGroupingMode === 'lifecycle') return getLifecycleGroups(liveAgents);
+      return getHierarchyGroups(liveAgents);
+    }
+
     function renderAgents() {
       ensureAcpSelection();
       const q = state.agentSearchQuery;
       const all = [...state.agents.values()].filter(a => matchesAgentSearch(a, q))
-        .sort((a,b) => {
-          // Boss / coordinators first
-          const aCoord = a.role === 'coordinator' || a.role === 'sub-coordinator' ? 0 : 1;
-          const bCoord = b.role === 'coordinator' || b.role === 'sub-coordinator' ? 0 : 1;
-          if (aCoord !== bCoord) return aCoord - bCoord;
-          return a.agent_id.localeCompare(b.agent_id);
-        });
+        .sort((a,b) => a.agent_id.localeCompare(b.agent_id));
 
-      const coordinators = all.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
-      const workers = all.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator');
-      const activeWorkers = workers.filter(a => WORKER_BUSY.has(a.fabric_status) || a.fabric_status === 'error' || a.fabric_status === 'blocked');
-      const idleWorkers = workers.filter(a => !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'offline' && a.fabric_status !== 'shutting_down' && a.fabric_status !== 'error' && a.fabric_status !== 'blocked');
-      const dead = all.filter(a => a.fabric_status === 'offline' || a.fabric_status === 'shutting_down');
+      const dead = all.filter(a => !a.process_alive || a.fabric_status === 'offline' || a.fabric_status === 'shutting_down');
+      const live = all.filter(a => !dead.includes(a));
+      const coordinators = live.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const processing = live.filter(a => WORKER_BUSY.has(a.fabric_status)).length;
+      const blocked = live.filter(a => ['blocked', 'error'].includes(agentStatus(a))).length;
 
-      // Stats bar
-      const total = all.length;
-      const alive = all.filter(a => a.process_alive).length;
-      const processing = all.filter(a => WORKER_BUSY.has(a.fabric_status)).length;
       refs.agentStatsBar.innerHTML = `
-        <span class="stat">Total: <b>${total}</b></span>
-        <span class="stat">Alive: <b>${alive}</b></span>
+        <span class="stat">Total: <b>${all.length}</b></span>
+        <span class="stat">Live: <b>${live.length}</b></span>
         <span class="stat">Processing: <b>${processing}</b></span>
+        <span class="stat">Blocked/Error: <b>${blocked}</b></span>
         <span class="stat">Coordinators: <b>${coordinators.length}</b></span>
-        <span class="stat">Offline: <b>${dead.length}</b></span>
+        <span class="stat">Offline/History: <b>${dead.length}</b></span>
       `;
 
-      refs.coordinatorsCount.textContent = `(${coordinators.length})`;
-      refs.workersActiveCount.textContent = `(${activeWorkers.length})`;
-      refs.workersIdleCount.textContent = `(${idleWorkers.length})`;
+      const groups = getGroupedSections(live);
+      refs.agentGroupedSections.innerHTML = groups.map((group) => {
+        const collapsed = Boolean(state.agentGroupCollapsed[group.key]);
+        return `<div class="agent-section agent-category-panel ${group.tone === 'alert' ? 'alert' : ''} ${collapsed ? 'collapsed' : ''}" data-group-key="${escapeHtml(group.key)}">
+          <button class="agent-category-header" data-action="toggle-agent-group" data-group-key="${escapeHtml(group.key)}" aria-expanded="${String(!collapsed)}">
+            <span class="agent-category-toggle-icon">▶</span>
+            <span class="agent-category-title">${escapeHtml(group.title)}</span>
+            <span class="agent-group-note">${escapeHtml(group.note || '')}</span>
+            <span class="muted">(${group.agents.length})</span>
+          </button>
+          <div class="agent-category-body">
+            <div class="agent-lane">${renderLaneCards(group.agents)}</div>
+          </div>
+        </div>`;
+      }).join('') || `<div class="agent-section"><div class="agent-category-body"><div class="agent-lane"><article class="card lane-empty-card"><div class="muted">No live agents for this filter.</div></article></div></div></div>`;
 
-      refs.coordinatorsGrid.innerHTML = renderLaneCards(coordinators);
-      refs.workersActiveGrid.innerHTML = renderLaneCards(activeWorkers);
-      refs.workersIdleGrid.innerHTML = renderLaneCards(idleWorkers);
-      applyAgentCategoryState();
-
-      // Offline / History
       refs.historyCount.textContent = `(${dead.length})`;
       if (!dead.length) {
         refs.historyAgentsGrid.innerHTML = `<div class="card" style="opacity:.55;"><div class="muted">Sin agentes en history.</div></div>`;
@@ -1825,6 +1972,23 @@
       return { coordinator, orchestrator };
     }
 
+    function normalizeAgentIdList(values = []) {
+      return [...new Set((values || []).map((v) => String(v || '').trim()).filter((v) => v && v !== '--' && v.toLowerCase() !== 'null' && v.toLowerCase() !== 'undefined'))];
+    }
+
+    function renderAgentJumpLink(agentId) {
+      const id = String(agentId || '').trim();
+      if (!id || id === '--') return '--';
+      const isKnown = state.agents.has(id);
+      return `<a href="#" class="ops-link" data-action="select-acp-agent" data-agent-id="${escapeHtml(id)}" title="Open ${escapeHtml(id)} in Agent panel">${escapeHtml(id)}${isKnown ? '' : ' (?)'}</a>`;
+    }
+
+    function renderAgentJumpLinks(agentIds = []) {
+      const ids = normalizeAgentIdList(agentIds);
+      if (!ids.length) return '--';
+      return ids.map((id) => renderAgentJumpLink(id)).join(', ');
+    }
+
     function getSubtaskAssignees(subtask = {}, task = {}) {
       const fromSubtask = Array.isArray(subtask.assigned_agents)
         ? subtask.assigned_agents
@@ -1840,6 +2004,76 @@
       const inline = Array.isArray(task.subtasks) ? task.subtasks : [];
       if (inline.length) return inline.map(st => normalizeSubtaskEntity(st, task.id)).filter(Boolean);
       return materializeTaskSubtasks(task.id);
+    }
+
+    function normalizeIdList(raw) {
+      const arr = Array.isArray(raw) ? raw : (raw != null ? [raw] : []);
+      return arr
+        .map((item) => (typeof item === 'object' ? (item.id ?? item.task_id ?? item.taskId) : item))
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id));
+    }
+
+    function getTaskDependencies(task = {}) {
+      return normalizeIdList(
+        task.dependencies
+        ?? task.depends_on
+        ?? task.depends_on_task_ids
+        ?? task.blocked_by
+        ?? task.blocked_by_task_ids
+      );
+    }
+
+    function getTaskDependents(task = {}) {
+      return normalizeIdList(task.blocking ?? task.blocking_task_ids ?? task.unblocks ?? task.dependents);
+    }
+
+    function getTaskInfraMetadata(task = {}) {
+      return {
+        branch: task.branch || task.git_branch || task.base_branch || '--',
+        worktree: task.worktree_path || task.repo_local_path || task.workspace_path || '--',
+        tmuxSession: task.tmux_session || task.session || task.tmux || '--',
+        pr: task.pr_number ? `#${task.pr_number}` : (task.pr_url || '--'),
+      };
+    }
+
+    function getSubtaskAttempts(subtask = {}) {
+      const value = subtask.attempt_count
+        ?? subtask.attempts
+        ?? subtask.retry_count
+        ?? subtask.retries
+        ?? subtask.run_attempts;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function extractLastError(entity = {}) {
+      const raw = entity.last_error ?? entity.error ?? entity.lastError ?? entity.failure_reason;
+      if (!raw) return '';
+      if (typeof raw === 'string') return raw;
+      if (typeof raw === 'object') {
+        return raw.message || raw.error || raw.reason || JSON.stringify(raw);
+      }
+      return String(raw);
+    }
+
+    function getTaskAgentIds(task = {}, subtasks = []) {
+      const fromTask = Array.isArray(task.agent_ids) ? task.agent_ids : [];
+      const fromSubtasks = subtasks.flatMap((s) => getSubtaskAssignees(s, task));
+      return [...new Set([...fromTask, ...fromSubtasks].filter(Boolean))];
+    }
+
+    function renderAgentQuickActions(agentIds = []) {
+      if (!agentIds.length) return '<span class="muted">No assigned agents.</span>';
+      return agentIds.map((id) => `
+        <button class="btn" data-action="select-acp-agent" data-agent-id="${escapeHtml(id)}">Open ${escapeHtml(id)}</button>
+        <button class="btn" data-action="view-log" data-agent-id="${escapeHtml(id)}">Log ${escapeHtml(id)}</button>
+      `).join('');
+    }
+
+    function renderTaskLinkList(taskIds = [], projectId = null) {
+      if (!taskIds.length) return '--';
+      return taskIds.map((id) => `<a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(id)}" data-project-id="${escapeHtml(projectId ?? '')}">#${escapeHtml(id)}</a>`).join(', ');
     }
 
     function ensureOperationsSelection(projects = []) {
@@ -1884,14 +2118,14 @@
                 <span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>
                 ${taskStatusBadge(task.status)}
               </div>
-              <div class="ops-tree-task-owners">coord: ${escapeHtml(ownership.coordinator)} · orch/subcoord: ${escapeHtml(ownership.orchestrator)}</div>
+              <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}</div>
               <div class="ops-tree-subtasks">
                 ${subtasks.length ? subtasks.map((subtask) => {
                   const subtaskSelected = selected.type === 'subtask' && Number(selected.subtaskId) === Number(subtask.id);
                   const assigned = getSubtaskAssignees(subtask, task);
                   return `<div class="ops-tree-subtask ${subtaskSelected ? 'active' : ''}" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
                     <span>#${escapeHtml(subtask.id)} ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</span>
-                    <span class="muted">${escapeHtml(subtask.status || 'pending')} · ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</span>
+                    <span class="muted">${escapeHtml(subtask.status || 'pending')} · ${renderAgentJumpLinks(assigned || [])}</span>
                   </div>`;
                 }).join('') : '<div class="muted">No subtasks</div>'}
               </div>
@@ -1912,24 +2146,51 @@
         const project = state.projects.get(Number(task.project_id));
         const ownership = getTaskOwnership(task);
         const subtasks = getTaskSubtasksNormalized(task);
+        const infra = getTaskInfraMetadata(task);
+        const dependencies = getTaskDependencies(task);
+        const dependents = getTaskDependents(task);
+        const taskAgents = getTaskAgentIds(task, subtasks);
+        const taskError = extractLastError(task);
         refs.opsLaneTitle.textContent = `🧩 Task #${task.id} detail`;
         refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
-          <article class="ops-lane-card">
-            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;"><strong>${escapeHtml(task.title || `Task #${task.id}`)}</strong>${taskStatusBadge(task.status)}</div>
-            <div class="muted" style="margin-top:4px;">${escapeHtml(project?.code || `Project ${task.project_id || '--'}`)} · #${escapeHtml(task.id)}</div>
-            <div class="meta-grid" style="margin-top:8px;">
+          <article class="ops-task-detail-panel" data-surface="task-detail-panel">
+            <div class="ops-task-detail-header">
+              <div>
+                <strong>${escapeHtml(task.title || `Task #${task.id}`)}</strong>
+                <div class="muted">${escapeHtml(project?.code || `Project ${task.project_id || '--'}`)} · task #${escapeHtml(task.id)}</div>
+              </div>
+              ${taskStatusBadge(task.status)}
+            </div>
+            <div class="ops-detail-kv">
               <div><b>Coordinator:</b> ${escapeHtml(ownership.coordinator)}</div>
               <div><b>Orchestrator/Sub-coordinator:</b> ${escapeHtml(ownership.orchestrator)}</div>
-              <div><b>Branch:</b> ${escapeHtml(task.branch || '--')}</div>
-              <div><b>Worktree:</b> ${escapeHtml(task.worktree_path || '--')}</div>
+              <div><b>Branch:</b> ${escapeHtml(infra.branch)}</div>
+              <div><b>Worktree:</b> ${escapeHtml(infra.worktree)}</div>
+              <div><b>tmux session:</b> ${escapeHtml(infra.tmuxSession)}</div>
+              <div><b>PR:</b> ${task.pr_url ? `<a href="${escapeHtml(task.pr_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(infra.pr)}</a>` : escapeHtml(infra.pr)}</div>
+              <div><b>Dependencies:</b> ${renderTaskLinkList(dependencies, task.project_id)}</div>
+              <div><b>Blocking:</b> ${renderTaskLinkList(dependents, task.project_id)}</div>
+            </div>
+            ${taskError ? `<div class="ops-detail-error"><b>Last error:</b> ${escapeHtml(taskError)}</div>` : '<div class="muted">Last error: none</div>'}
+            <div class="ops-detail-actions">
+              <button class="btn" data-action="open-task" data-task-id="${escapeHtml(task.id)}">Open full task modal</button>
+              ${renderAgentQuickActions(taskAgents)}
             </div>
           </article>
+
           <article class="ops-lane-card">
-            <div style="display:flex;justify-content:space-between;gap:8px;"><strong>Subtasks</strong><span class="muted">${subtasks.length}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:8px;"><strong>Subtasks deep detail</strong><span class="muted">${subtasks.length}</span></div>
             <div class="ops-detail-subtasks" style="margin-top:8px;">
               ${subtasks.length ? subtasks.map((subtask) => {
                 const assigned = getSubtaskAssignees(subtask, task);
-                return `<div class="ops-tree-subtask" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}"><strong>#${escapeHtml(subtask.id)}</strong> ${escapeHtml(subtask.title || subtask.text || 'Subtask')}<div class="muted">state: ${escapeHtml(subtask.status || 'pending')} · assigned: ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</div></div>`;
+                const attempts = getSubtaskAttempts(subtask);
+                const subErr = extractLastError(subtask);
+                const deps = normalizeIdList(subtask.dependencies ?? subtask.depends_on ?? subtask.blocked_by);
+                return `<div class="ops-tree-subtask" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}">
+                  <div><strong>#${escapeHtml(subtask.id)}</strong> ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</div>
+                  <div class="muted">state: ${escapeHtml(subtask.status || 'pending')} · assigned: ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'} · attempts: ${attempts != null ? escapeHtml(attempts) : '--'} · deps: ${deps.length ? deps.map((id) => `#${id}`).join(', ') : '--'}</div>
+                  ${subErr ? `<div class="ops-detail-error" style="margin-top:6px;"><b>last error:</b> ${escapeHtml(subErr)}</div>` : ''}
+                </div>`;
               }).join('') : '<div class="muted">No subtasks.</div>'}
             </div>
           </article>
@@ -1946,16 +2207,26 @@
         const task = state.tasks.get(Number(subtask.task_id));
         const project = task ? state.projects.get(Number(task.project_id)) : null;
         const assigned = getSubtaskAssignees(subtask, task || {});
+        const attempts = getSubtaskAttempts(subtask);
+        const deps = normalizeIdList(subtask.dependencies ?? subtask.depends_on ?? subtask.blocked_by);
+        const subErr = extractLastError(subtask);
         refs.opsLaneTitle.textContent = `🧷 Subtask #${subtask.id} detail`;
         refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
-          <article class="ops-lane-card">
-            <strong>${escapeHtml(subtask.title || subtask.text || `Subtask #${subtask.id}`)}</strong>
-            <div class="meta-grid" style="margin-top:8px;">
-              <div><b>State:</b> ${escapeHtml(subtask.status || 'pending')}</div>
+          <article class="ops-task-detail-panel" data-surface="task-detail-panel">
+            <div class="ops-task-detail-header">
+              <strong>${escapeHtml(subtask.title || subtask.text || `Subtask #${subtask.id}`)}</strong>
+              <span class="badge t-${escapeHtml(subtask.status || 'planned')}">${escapeHtml(subtask.status || 'pending')}</span>
+            </div>
+            <div class="ops-detail-kv">
               <div><b>Assigned agents:</b> ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</div>
+              <div><b>Attempts:</b> ${attempts != null ? escapeHtml(attempts) : '--'}</div>
+              <div><b>Dependencies:</b> ${deps.length ? deps.map((id) => `#${escapeHtml(id)}`).join(', ') : '--'}</div>
+              <div><b>Last heartbeat:</b> ${escapeHtml(subtask.updated_at || subtask.modified_at || '--')}</div>
               <div><b>Task:</b> ${task ? `<a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}">#${escapeHtml(task.id)} ${escapeHtml(task.title || '')}</a>` : '--'}</div>
               <div><b>Project:</b> ${project ? `<a href="#" data-action="select-ops-project" data-project-id="${escapeHtml(project.id)}">${escapeHtml(project.code || `p${project.id}`)}</a>` : '--'}</div>
             </div>
+            ${subErr ? `<div class="ops-detail-error"><b>Last error:</b> ${escapeHtml(subErr)}</div>` : '<div class="muted">Last error: none</div>'}
+            <div class="ops-detail-actions">${renderAgentQuickActions(assigned)}</div>
           </article>
         </div>`;
         return;
@@ -1984,13 +2255,62 @@
               const subtasks = getTaskSubtasksNormalized(task);
               return `<div class="ops-tree-task" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
                 <div class="ops-tree-task-head"><span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>${taskStatusBadge(task.status)}</div>
-                <div class="ops-tree-task-owners">coord: ${escapeHtml(ownership.coordinator)} · orch/subcoord: ${escapeHtml(ownership.orchestrator)}</div>
+                <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}</div>
                 <div class="muted">subtasks: ${subtasks.length}</div>
               </div>`;
             }).join('') : '<div class="muted">No tasks in current project.</div>'}
           </div>
         </article>
       </div>`;
+    }
+
+
+    function renderOperationsRail() {
+      if (!refs.opsRailBody || !refs.opsRailAgent) return;
+      const agentId = ensureAcpSelection();
+      const agent = agentId ? state.agents.get(agentId) : null;
+      refs.opsRailAgent.textContent = agent ? agent.agent_id : 'No agent selected';
+
+      if (!agent) {
+        refs.opsRailBody.innerHTML = `<p class="muted">Select an agent to view recent outputs, send a message, or open mailbox log.</p>`;
+        return;
+      }
+
+      const outputs = getAcpOutputs(agent.agent_id).slice(-20).map((m) => ({ ...m, source: 'agent' }));
+      const human = (state.acpHumanMessages.get(agent.agent_id) || []).slice(-20).map((m) => ({ ...m, source: 'human' }));
+      const messages = human.concat(outputs).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(-30);
+      const offline = !agent.process_alive || ['offline','shutting_down'].includes(agentStatus(agent));
+      const contextHtml = renderAgentContext(agent) || `<span>${escapeHtml(agent.pm_task_title || (typeof agent.current_task === 'object' ? agent.current_task?.title : agent.current_task) || 'No active task context')}</span>`;
+
+      refs.opsRailBody.innerHTML = `
+        <div class="ops-agent-rail">
+          <div class="ops-agent-header">
+            <strong>${escapeHtml(agent.agent_id)}</strong>
+            <div class="muted">${escapeHtml(agent.role || '--')} · ${escapeHtml(agentStatus(agent))}</div>
+            <div class="muted">${contextHtml}</div>
+            <div class="ops-agent-actions">
+              <button class="btn" data-action="ping-selected-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Ping</button>
+              <button class="btn" data-action="open-selected-agent-log" data-agent-id="${escapeHtml(agent.agent_id)}">Open log/mailbox</button>
+              <button class="btn" data-action="refresh-acp">Refresh</button>
+            </div>
+          </div>
+          <div class="ops-agent-messages" id="opsRailMessages">
+            ${messages.length ? messages.map((m) => {
+              const cls = m.source === 'human' ? 'human' : `agent ${m.isError ? 'error' : ''}`;
+              return `<div class="acp-message ${cls}"><div class="acp-meta"><b>${m.source === 'human' ? 'You' : escapeHtml(agent.agent_id)}</b><span class="acp-type-tag">${escapeHtml(m.type || (m.source === 'human' ? 'chat' : 'output'))}</span><span>${fmtDate(m.timestamp)}</span>${m.status ? `<span>${escapeHtml(m.status)}</span>` : ''}</div><div class="acp-bubble ${m.source === 'human' ? '' : 'markdown'}">${m.source === 'human' ? escapeHtml(m.content) : renderMarkdown(m.content)}</div></div>`;
+            }).join('') : `<div class="acp-empty">No outputs yet for ${escapeHtml(agent.agent_id)}.</div>`}
+          </div>
+          <div class="ops-agent-composer">
+            <textarea id="opsRailInput" class="acp-input ops-agent-input" placeholder="Send message to ${escapeHtml(agent.agent_id)}" ${offline || state.acpSending ? 'disabled' : ''}></textarea>
+            <div class="actions" style="margin:0;">
+              <button class="btn" data-action="send-ops-message" data-agent-id="${escapeHtml(agent.agent_id)}" ${offline || state.acpSending ? 'disabled' : ''}>Send message</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const msgBox = document.getElementById('opsRailMessages');
+      if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
     }
 
     function renderOperations() {
@@ -2006,12 +2326,7 @@
       renderOperationsTree(projects);
       renderOperationsDetail();
 
-      const acpAgent = state.acpSelectedAgentId ? state.agents.get(state.acpSelectedAgentId) : null;
-      refs.opsRailAgent.textContent = acpAgent ? acpAgent.agent_id : 'No agent selected';
-      refs.opsRailBody.innerHTML = acpAgent
-        ? `<div class="ops-lane-card"><strong>${escapeHtml(acpAgent.agent_id)}</strong><div class="muted">${escapeHtml(acpAgent.role || '--')} · ${escapeHtml(agentStatus(acpAgent))}</div><div class="muted">${escapeHtml(acpAgent.pm_task_title || acpAgent.current_task || 'No active task context')}</div></div><div class="ops-lane-card"><div class="muted">Chat placeholder bound to Agents panel. Use Agents tab to send mailbox messages.</div></div>`
-        : `<p class="muted">Reserved rail for selected agent details, quick controls, and live chat context.</p>`;
-
+      renderOperationsRail();
       renderOperationsEventLog();
     }
 
@@ -2632,6 +2947,8 @@
           <div><b>base_branch:</b> ${escapeHtml(t.base_branch || '--')}</div>
           <div><b>worktree:</b> ${escapeHtml(t.worktree_path || '--')}</div>
           <div><b>tmux_session:</b> ${escapeHtml(t.tmux_session || '--')}</div>
+          <div><b>coordinator:</b> ${renderAgentJumpLink(getTaskOwnership(t).coordinator)}</div>
+          <div><b>orchestrator/subcoord:</b> ${renderAgentJumpLink(getTaskOwnership(t).orchestrator)}</div>
           <div><b>asana:</b> ${t.asana_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.asana_url)}">link</a>` : '--'}</div>
           <div><b>PR:</b> ${t.pr_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.pr_url)}">link</a> ${taskStatusBadge(t.pr_status || (t.status?.startsWith('pr_') ? t.status : ''))}` : '--'}</div>
         </div>
@@ -2649,7 +2966,7 @@
                   const ag = state.agents.get(aid);
                   const alive = ag?.process_alive;
                   const color = alive ? 'var(--green)' : 'var(--red)';
-                  return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</span>`;
+                  return `<a href="#" class="chip" data-action="select-acp-agent" data-agent-id="${escapeHtml(aid)}" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</a>`;
                 }).join('') || '<span class="muted" style="font-size:11px;">Sin agentes</span>'}
               </div>
             </div>
@@ -2668,7 +2985,7 @@
             const ag = state.agents.get(aid);
             const alive = ag?.process_alive;
             const color = alive ? 'var(--green)' : 'var(--red)';
-            return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}${ag?.role ? ` · ${escapeHtml(ag.role)}` : ''}</span>`;
+            return `<a href="#" class="chip" data-action="select-acp-agent" data-agent-id="${escapeHtml(aid)}" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}${ag?.role ? ` · ${escapeHtml(ag.role)}` : ''}</a>`;
           }).join('') || '<span class="muted">Sin agentes asignados</span>'}
         </div>
 
@@ -2891,12 +3208,26 @@
         state.acpSelectedAgentId = el.dataset.agentId || '';
         localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
         renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
         fetchAcpMessages();
         return;
       }
 
       if (action === 'send-acp-message') {
         await sendAcpMessage('chat');
+        return;
+      }
+
+      if (action === 'send-ops-message') {
+        const agentId = el.dataset.agentId || state.acpSelectedAgentId || ensureAcpSelection();
+        const input = document.getElementById('opsRailInput');
+        const text = String(input?.value || '').trim();
+        if (!text) return;
+        state.acpSelectedAgentId = agentId;
+        localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        await sendAcpMessage('chat', { text });
+        if (input) input.value = '';
+        renderOperationsRail();
         return;
       }
 
@@ -2910,8 +3241,9 @@
         return;
       }
 
-      if (action === 'ping-agent') {
-        const id = el.dataset.agentId;
+      if (action === 'ping-agent' || action === 'ping-selected-agent') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (!id) return;
         try {
           await fetchJson(`${API}/api/healthcheck/${encodeURIComponent(id)}`, { method: 'POST' });
           addEventLog('healthcheck', `Ping enviado a ${id}`, { agent_id: id }, 'agent');
@@ -2931,11 +3263,11 @@
         }
       }
 
-      if (action === 'toggle-agent-category') {
-        const category = el.dataset.category;
-        if (category) {
-          const next = !state.agentCategoryCollapsed[category];
-          setAgentCategoryCollapsed(category, next);
+      if (action === 'toggle-agent-group') {
+        const groupKey = el.dataset.groupKey;
+        if (groupKey) {
+          const next = !state.agentGroupCollapsed[groupKey];
+          setAgentGroupCollapsed(groupKey, next);
         }
       }
 
@@ -2958,7 +3290,10 @@
         }
       }
 
-      if (action === 'view-log') openAgentLog(el.dataset.agentId);
+      if (action === 'view-log' || action === 'open-selected-agent-log') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (id) openAgentLog(id);
+      }
       if (action === 'view-project') openProjectDetail(el.dataset.projectId);
       if (action === 'open-task') {
         e.preventDefault();
@@ -2973,6 +3308,10 @@
       state.agentSearchQuery = e.target.value.trim();
       renderAgents();
     });
+    if (refs.agentGroupingMode) {
+      refs.agentGroupingMode.value = state.agentGroupingMode;
+      refs.agentGroupingMode.addEventListener('change', (e) => setAgentGroupingMode(e.target.value));
+    }
     if (refs.acpInput) {
       refs.acpInput.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
