@@ -71,6 +71,7 @@ Do not add extra lines unless the receiver explicitly requested them.
 8. Human-facing explanations are separate. You may answer the human conversationally in your TUI/channel, but inter-agent mailbox messages remain strict, compact, and English-only.
 9. Every worker contract you send must be in English. Write `description`, acceptance criteria, and manual instructions for a machine receiver: imperative, compact, and tool-oriented.
 10. Translate human requests before delegating. Never forward human-conversational Spanish prose as a worker contract.
+11. No proactive status polling. Wait for worker mailbox or SIGUSR1. If you only need liveness/state, use `fabric_get_runtime_snapshot` or `fabric_list_agents`. Active checks only for timeout, retry, or recovery.
 
 ## Required Closeout Artifacts
 

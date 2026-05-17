@@ -1385,11 +1385,17 @@ function handleMessage(msg: FabricMessage) {
       const text = String(msg.payload.text ?? "");
       const reviewerGateRetry = parseReviewerGateRetryRequest(msg.payload.reviewer_gate_retry);
       const ackLike = isAckLikeMailboxChat(text);
+      const isHumanSender = msg.from === "human";
       const replyInstructions = ackLike
         ? `\n\nMAILBOX NOTE\n` +
           `Machine-to-machine packet. This looks like a terminal ACK or informational closeout.\n` +
           `Do not reply unless you have new actionable data or a real question.\n` +
           `Never ACK an ACK.`
+        : isHumanSender
+        ? `\n\nHUMAN MESSAGE\n` +
+          `This message is from the human user.\n` +
+          `Respond with normal assistant text in the conversation.\n` +
+          `Do NOT use fabric_send_message to reply — your text response will be displayed automatically.`
         : `\n\nMAILBOX PROTOCOL\n` +
           `Machine-to-machine message from agent "${msg.from}".\n` +
           `Audience is another agent, not a human.\n` +
@@ -3263,15 +3269,17 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
     description: "Send a message to another Fabric agent via mailbox + SIGUSR1",
     promptSnippet: "Send a P2P message to another agent in the Fabric mesh",
     promptGuidelines: [
-      "Use fabric_send_message when you need to communicate with another agent.",
-      "Set 'to' to the target agent_id, 'type' to 'chat' for text, 'contract' for tasks, 'response' for replies, or 'telegram_agent_response'/'telegram_response' when replying to monitor.",
+      "Use fabric_send_message for inter-agent communication in the Fabric mesh.",
+      "Special case: if the current turn includes an explicit Telegram channel contract, use this tool to reply to 'monitor' with type 'telegram_agent_response'.",
+      "Set 'to' to the target agent_id and 'type' to the appropriate message type.",
       "Put the actual content inside 'payload' as a JSON object.",
-      "For telegram_agent_response preferred schema: payload.sender.agent_id + payload.sender.role + payload.telegram_message.text (+ optional payload.telegram_message.format=telegram_markdown|plain and include_sender_header).",
-      "Legacy telegram_response compatibility is preserved: payload.text still works; extension maps missing fields from telegramContext when possible."
+      "For 'chat' and 'message', include non-empty 'payload.text'.",
+      "Do not use this tool to send chat/message replies to 'human' or 'telegram-gateway'.",
+      "For Telegram replies, include non-empty 'payload.telegram_message.text' or legacy non-empty 'payload.text'."
     ],
     parameters: Type.Object({
       to: Type.String({ description: "Target agent ID" }),
-      type: Type.String({ description: "Message type: chat | contract | healthcheck | message | response | telegram_response | telegram_agent_response | telegram_user_message | task" }),
+      type: Type.String({ description: "Message type: chat | contract | healthcheck | message | response | telegram_response | telegram_agent_response | task" }),
       payload: Type.Object({}, { description: "JSON payload" }),
       correlation_id: Type.Optional(Type.String()),
     }),
@@ -3394,6 +3402,18 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
           ],
           details: { sent: mailboxOk, target: params.to, type: msgType, payload, via: "mailbox_fallback" },
         };
+      }
+
+      // Guard: reject empty messages to prevent model-level tool-call loops.
+      // The model must include payload.text when sending chat/message to another agent.
+      if (msgType === "chat" || msgType === "message") {
+        const text = typeof payload.text === "string" ? payload.text.trim() : "";
+        if (!text) {
+          return {
+            content: [{ type: "text", text: `Rejected: ${msgType} to ${params.to} has empty payload.text. Include the message content in payload.text when calling fabric_send_message.` }],
+            details: { sent: false, target: params.to, type: msgType, error: "empty_payload_text" },
+          };
+        }
       }
 
       const ok = sendMessage(params.to, {
