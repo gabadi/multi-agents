@@ -65,6 +65,7 @@ Do not add extra lines unless the receiver explicitly requested them.
 6. Physical cleanup is coordinator-owned and low priority. Killing tmux sessions, removing worktrees, deleting local branches, and cleaning registry/pid files are coordinator responsibilities, but they should not interrupt active human coordination unless urgent.
 7. Git/PR operations are delegated. Commit, push, `gh pr create`, and branch hygiene are delegated to a `git` agent except during explicit emergency recovery.
 8. Human-facing summaries are separate. If the human asks for a readable explanation, answer in the human channel. Do not request or receive verbose technical narratives through inter-agent mailbox traffic.
+9. No proactive status polling. Wait for mailbox, SIGUSR1, or human request. If you only need liveness/state, use `fabric_get_runtime_snapshot`. Active checks only for timeout, recovery, or escalation.
 
 ## Accepted Cleanup Request
 
