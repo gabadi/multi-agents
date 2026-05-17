@@ -114,6 +114,7 @@ interface MonitoredAgent {
   mailbox_pending: number;
   offline_cycles: number;
   blocked_at?: string;
+  last_pid_verified_at?: number;
 }
 
 interface SSEClient {
@@ -893,6 +894,7 @@ function loadAgentsFromDb(): MonitoredAgent[] {
         process_alive: checkPid(r.pid),
         mailbox_pending: computeMailboxPending(r.agent_id, r.pid),
         offline_cycles: 0,
+        last_pid_verified_at: 0,
       }));
     } catch (err: any) {
       lastErr = err;
@@ -948,6 +950,19 @@ function computeMailboxPending(agentId: string, _pid: number | null): number {
     }
   }
   return Math.max(0, mboxSize - lastOffset);
+}
+
+function wakeAgentIfPending(agentId: string, pid: number | null): void {
+  if (!pid || !checkPid(pid)) return;
+  const pending = computeMailboxPending(agentId, pid);
+  if (pending > 0) {
+    try {
+      process.kill(pid, "SIGUSR1");
+      monitorLog("info", "agent.wake_after_pid_fix", { agent_id: agentId, pid, pending_bytes: pending });
+    } catch {
+      // ignore if process vanished between check and signal
+    }
+  }
 }
 
 function readNewEvents(): Record<string, unknown>[] {
@@ -1284,31 +1299,54 @@ function refreshAgentsFromDb() {
     let effectivePid = agent.pid;
     let effectiveAlive = agent.process_alive;
 
+    // Resolve canonical PID: prefer tmux pane, cross-check memory against it
+    const panePid = agent.pane_id ? getPanePid(agent.pane_id) : null;
+    const panePidAlive = panePid ? checkPid(panePid) : false;
+
     if (existing) {
       const memoryPidAlive = existing.pid ? checkPid(existing.pid) : false;
-      if (memoryPidAlive) {
-        // Memory PID is alive — trust it over DB PID
+      if (memoryPidAlive && existing.pid === panePid) {
+        // Memory PID matches tmux pane — trust it
+        effectivePid = existing.pid;
+        effectiveAlive = true;
+      } else if (panePidAlive) {
+        // Pane PID is alive and either memory is stale or mismatched — prefer pane
+        effectivePid = panePid;
+        effectiveAlive = true;
+        agent.offline_cycles = 0;
+        updateAgentPid(agent.agent_id, panePid);
+        wakeAgentIfPending(agent.agent_id, panePid);
+      } else if (memoryPidAlive) {
+        // Memory PID is alive but does NOT match pane; pane is missing/dead.
+        // Keep memory PID as a fallback, but log a warning so we notice drift.
+        monitorLog("warn", "refresh.pid_drift_detected", {
+          agent_id: agent.agent_id,
+          memory_pid: existing.pid,
+          pane_pid: panePid,
+          db_pid: agent.pid,
+          pane_id: agent.pane_id,
+        });
         effectivePid = existing.pid;
         effectiveAlive = true;
       } else if (!dbPidAlive && agent.pane_id) {
-        // Both memory and DB PIDs dead — try recovering from tmux pane
-        const panePid = getPanePid(agent.pane_id);
+        // All PIDs dead — try recovering from tmux pane one more time
         if (panePid && checkPid(panePid)) {
           effectivePid = panePid;
           effectiveAlive = true;
           agent.offline_cycles = 0;
           updateAgentPid(agent.agent_id, panePid);
+          wakeAgentIfPending(agent.agent_id, panePid);
         }
       }
     } else {
       // Brand new agent from DB — try pane recovery if DB PID is dead
       if (!dbPidAlive && agent.pane_id) {
-        const panePid = getPanePid(agent.pane_id);
         if (panePid && checkPid(panePid)) {
           effectivePid = panePid;
           effectiveAlive = true;
           agent.offline_cycles = 0;
           updateAgentPid(agent.agent_id, panePid);
+          wakeAgentIfPending(agent.agent_id, panePid);
         }
       }
     }
@@ -1380,8 +1418,13 @@ function refreshAgentsFromDb() {
 
 function runWatchdog() {
   for (const agent of agents.values()) {
-    // 1. PID check — if stored PID is dead, try recovering from tmux pane
+    // 1. PID check — if stored PID is dead, try recovering from tmux pane.
+    // Also cross-check alive PIDs against tmux pane every 60s to catch drift
+    // (e.g. a stray pi process that outlived the real agent).
     let alive = checkPid(agent.pid);
+    const now = Date.now();
+    const shouldVerify = !agent.last_pid_verified_at || (now - agent.last_pid_verified_at > 60000);
+
     if (!alive && agent.pane_id) {
       const panePid = getPanePid(agent.pane_id);
       if (panePid && checkPid(panePid)) {
@@ -1391,8 +1434,21 @@ function runWatchdog() {
         agent.offline_cycles = 0;
         delete (agent as any).offline_at;
         updateAgentPid(agent.agent_id, panePid);
+        wakeAgentIfPending(agent.agent_id, panePid);
         alive = true;
       }
+    } else if (alive && shouldVerify && agent.pane_id) {
+      const panePid = getPanePid(agent.pane_id);
+      if (panePid && panePid !== agent.pid && checkPid(panePid)) {
+        monitorLog("warn", "watchdog.pid_drift_corrected", { agent_id: agent.agent_id, old_pid: agent.pid, new_pid: panePid, pane_id: agent.pane_id });
+        agent.pid = panePid;
+        agent.process_alive = true;
+        agent.offline_cycles = 0;
+        delete (agent as any).offline_at;
+        updateAgentPid(agent.agent_id, panePid);
+        wakeAgentIfPending(agent.agent_id, panePid);
+      }
+      agent.last_pid_verified_at = now;
     }
 
     if (!alive) {
