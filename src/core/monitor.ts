@@ -1436,6 +1436,7 @@ function runWatchdog() {
         updateAgentPid(agent.agent_id, panePid);
         wakeAgentIfPending(agent.agent_id, panePid);
         alive = true;
+        agent.last_pid_verified_at = now;
       }
     } else if (alive && shouldVerify && agent.pane_id) {
       const panePid = getPanePid(agent.pane_id);
