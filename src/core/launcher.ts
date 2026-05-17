@@ -451,9 +451,10 @@ async function main() {
   const cmdFile = `${FABRIC_DIR}/launch-scripts/${agentId}.sh`;
   mkdirSync(`${FABRIC_DIR}/launch-scripts`, { recursive: true });
   const cdWorkspace = workspaceDir ? `cd ${shellQuote(workspaceDir)}\n` : "";
-  // Ensure mise/volta node is preferred over Homebrew node to avoid libsimdjson conflicts
-  const miseNodePath = `/Users/jescobar/.local/share/mise/installs/node/22.16.0/bin`;
-  const fixedPathExport = `export PATH=${shellQuote(miseNodePath)}:$PATH`;
+  // Ensure the node binary that launched this script is first in PATH
+  // (avoids Homebrew node / libsimdjson conflicts in tmux panes)
+  const launcherNodeDir = dirname(process.execPath);
+  const fixedPathExport = `export PATH=${shellQuote(launcherNodeDir)}:$PATH`;
   writeFileSync(cmdFile, `set -e\n${fixedPathExport}\n${envExports}\n${cdWorkspace}exec ${piCmd}\n`, "utf8");
 
   // Find free pane or create new one — thread-safe via split-window -P -F
