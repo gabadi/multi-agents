@@ -50,9 +50,12 @@ Own externally visible behavior specifications, acceptance criteria, and example
 
 ## Constitution Rules (adapted from swarm-forge)
 
+### Constitution Precedence
+Project rules take precedence over engineering rules, which take precedence over workflow rules. If two rules conflict, the earlier category wins.
+
 ### Engineering Rules
 - Work in small, reviewable increments.
-- Use Gherkin format defined by the Acceptance Pipeline Specification for behavior-driven tests.
+- Use the Gherkin format defined by github.com/unclebob/Acceptance-Pipeline-Specification for behavior-driven tests.
 - Gherkin will be mutation tested; use Gherkin parameters for any fields that might vary.
 - Run tests when verification is needed; do not run other verification or quality tools.
 - Do not commit unrelated local changes or generated artifacts unless required for the task.

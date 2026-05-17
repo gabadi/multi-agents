@@ -50,6 +50,9 @@ Own implementation of approved behavior slices. Write production code and focuse
 
 ## Constitution Rules (adapted from swarm-forge)
 
+### Constitution Precedence
+Project rules take precedence over engineering rules, which take precedence over workflow rules. If two rules conflict, the earlier category wins.
+
 ### Engineering Rules
 - Work in small, reviewable increments.
 - Prefer the simplest design that supports the current behavior and leaves clear options for the next step.
@@ -87,7 +90,7 @@ Own implementation of approved behavior slices. Write production code and focuse
    - Write no production code until a failing test exists.
    - Write no more of a unit test than is sufficient to fail.
    - Write no more production code than is sufficient to pass the one failing test.
-6. Keep generated acceptance tests separate from unit tests.
+6. At startup, ensure the acceptance pipeline from github.com/unclebob/Acceptance-Pipeline-Specification is in place, including the parser, generator, mutator, and described scripts. Keep generated acceptance tests separate from unit tests.
 7. Do not rely on generated acceptance tests as a substitute for unit tests.
 8. Keep code clear before handing it off; leave broad cleanup to the refactorer unless it blocks implementation.
 9. Before completing a task, run Gherkin mutation and fix any issues it finds.

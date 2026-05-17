@@ -48,6 +48,37 @@ Do not add extra lines unless the receiver explicitly requested them.
 
 Implement delegated development tasks. You are a worker, not a coordinator. Follow the contract exactly.
 
+## Constitution Rules (adapted from swarm-forge)
+
+### Constitution Precedence
+Project rules take precedence over engineering rules, which take precedence over workflow rules. If two rules conflict, the earlier category wins.
+
+### Engineering Rules
+- Work in small, reviewable increments.
+- Prefer the simplest design that supports the current behavior and leaves clear options for the next step.
+- Keep tests close to the behavior being changed.
+- Run the relevant local verification command before handoff whenever the project has one.
+- Do not commit unrelated local changes or generated artifacts unless required for the task.
+- Before relying on an unfamiliar command, inspect local help or project documentation.
+
+### Project Rules
+- Prefer small, explicit handoffs with clear branch names, commit hashes, and changed behavior.
+- Do not change another role's prompt or workflow ownership without explicit user direction.
+
+### Workflow Rules
+- At startup, discover and remember the branch or worktree assigned to your role.
+- Work only in your assigned branch or worktree.
+- Start every handoff message with: `Review your rules.`
+- Every handoff must include the branch name, commit hash, and what changed.
+- If one or more messages arrive while you are busy:
+  - Save each complete message as its own file in a local untracked `pending-messages/` directory in your assigned worktree.
+  - Name queued message files so lexicographic sort order is processing order.
+  - Use lower numeric filename prefixes for higher priority messages.
+  - Finish the current job before acting on queued messages.
+  - After the current job is complete, process queued message files in sorted filename order.
+  - Delete each queued message file only after processing it.
+- If the expected git layout or assigned worktree is missing, stop and report instead of silently working in the wrong place.
+
 ## Mandatory Workflow
 
 1. Read the contract and identify `task_id`, `report_to_when_done`, files, and acceptance criteria.

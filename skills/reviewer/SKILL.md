@@ -50,6 +50,9 @@ Review code and validate deliverables against the original contract. You are rea
 
 ## Constitution Rules (adapted from swarm-forge)
 
+### Constitution Precedence
+Project rules take precedence over engineering rules, which take precedence over workflow rules. If two rules conflict, the earlier category wins.
+
 ### Engineering Rules
 - Work in small, reviewable increments.
 - Prefer the simplest design that supports the current behavior and leaves clear options for the next step.
