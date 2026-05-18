@@ -3326,21 +3326,24 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
 
         if (lifecycleStatus === "router_queued") {
           return {
-            content: [{ type: "text", text: "telegram_agent_response status=router_queued is monitor-owned and not allowed from agents" }],
+            content: [{ type: "text", text: "Call rejected: status=router_queued is monitor-owned and cannot be set by an agent." }],
             details: { sent: false, target: params.to, type: msgType, error: "invalid_status_router_queued" },
+            isError: true,
           };
         }
 
         if (typeof text !== "string" || text.trim() === "") {
           return {
-            content: [{ type: "text", text: "telegram_agent_response requires payload.telegram_message.text or legacy payload.text" }],
+            content: [{ type: "text", text: "Call rejected: payload.telegram_message.text (or legacy payload.text) was empty." }],
             details: { sent: false, target: params.to, type: msgType, error: "missing_text" },
+            isError: true,
           };
         }
         if (payload.request_id == null && payload.chat_id == null) {
           return {
-            content: [{ type: "text", text: "telegram_agent_response requires payload.request_id or payload.chat_id (routing missing)" }],
+            content: [{ type: "text", text: "Call rejected: neither payload.request_id nor payload.chat_id was provided (routing missing)." }],
             details: { sent: false, target: params.to, type: msgType, error: "missing_telegram_routing" },
+            isError: true,
           };
         }
 
@@ -3675,40 +3678,45 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
       const reviewerGate = activeContractContext?.reviewerGate;
       if (!reviewerGate || reviewerGate.lane !== "reviewer") {
         return {
-          content: [{ type: "text", text: "fabric_request_reviewer_retry requires an active reviewer-lane reviewer_gate contract" }],
+          content: [{ type: "text", text: "Call rejected: no active reviewer-lane reviewer_gate contract." }],
           details: { sent: false, error: "missing_reviewer_gate_contract" },
+          isError: true,
         };
       }
 
       const inbound = lastReviewerGateResponseContext;
       if (!inbound || inbound.reviewerGate.phase_id !== reviewerGate.phase_id || inbound.reviewerGate.lane !== "implementation") {
         return {
-          content: [{ type: "text", text: "fabric_request_reviewer_retry requires a matching implementation completion response for the active reviewer gate" }],
+          content: [{ type: "text", text: "Call rejected: no matching implementation completion response was found for the active reviewer gate." }],
           details: { sent: false, error: "missing_matching_implementation_response" },
+          isError: true,
         };
       }
 
       const implementationAttempt = inbound.reviewerGate.implementation_attempt;
       if (!isReviewerGateRetryAllowed({ reviewerGate, implementationAttempt })) {
         return {
-          content: [{ type: "text", text: `Retry not allowed for phase ${reviewerGate.phase_id} at attempt ${implementationAttempt}` }],
+          content: [{ type: "text", text: `Call rejected: retry not allowed for phase ${reviewerGate.phase_id} at attempt ${implementationAttempt}.` }],
           details: { sent: false, error: "retry_not_allowed", phase_id: reviewerGate.phase_id, implementation_attempt: implementationAttempt },
+          isError: true,
         };
       }
 
       const retryKey = `${reviewerGate.phase_id}:${implementationAttempt}`;
       if (reviewerGateRetryRequestsSent.has(retryKey)) {
         return {
-          content: [{ type: "text", text: `Retry already requested for phase ${reviewerGate.phase_id} attempt ${implementationAttempt}` }],
+          content: [{ type: "text", text: `Call rejected: retry was already requested for phase ${reviewerGate.phase_id} attempt ${implementationAttempt}.` }],
           details: { sent: false, error: "retry_already_requested", phase_id: reviewerGate.phase_id, implementation_attempt: implementationAttempt },
+          isError: true,
         };
       }
 
       const target = params.to || reviewerGate.implementation_agent_id;
       if (target !== reviewerGate.implementation_agent_id) {
         return {
-          content: [{ type: "text", text: `Retry target mismatch. Expected ${reviewerGate.implementation_agent_id}` }],
+          content: [{ type: "text", text: `Call rejected: retry target mismatch. Expected ${reviewerGate.implementation_agent_id}, got ${target}.` }],
           details: { sent: false, error: "retry_target_mismatch", expected_target: reviewerGate.implementation_agent_id, actual_target: target },
+          isError: true,
         };
       }
 
@@ -3782,8 +3790,9 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
       const blockingFailures = verificationResults.filter((r: any) => r?.passed === false && r?.required !== false);
       if (params.status === "done" && blockingFailures.length > 0) {
         return {
-          content: [{ type: "text", text: `Refusing to report done: required acceptance criteria failed: ${blockingFailures.map((r: any) => r.criterion_id).join(", ")}` }],
+          content: [{ type: "text", text: `Call rejected: status=done refused because required acceptance criteria failed: ${blockingFailures.map((r: any) => r.criterion_id).join(", ")}.` }],
           details: { sent: false, target: params.to, status: params.status, blocking_failures: blockingFailures },
+          isError: true,
         };
       }
 
