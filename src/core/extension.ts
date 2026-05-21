@@ -1387,8 +1387,11 @@ function handleMessage(msg: FabricMessage) {
       const ackLike = isAckLikeMailboxChat(text);
       const replyInstructions = ackLike
         ? `\n\nMAILBOX NOTE\n` +
-          `Machine-to-machine packet. This looks like a terminal ACK or informational closeout.\n` +
-          `Do not reply unless you have new actionable data or a real question.\n` +
+          `Treat this as a terminal ACK or closeout.\n` +
+          `If you have no new action, data, or question,\n` +
+          `end your turn silently and call no tool.\n` +
+          `Do not send empty, placeholder, or courtesy messages.\n` +
+          `Reply only if new actionable information is required.\n` +
           `Never ACK an ACK.`
         : `\n\nMAILBOX PROTOCOL\n` +
           `Machine-to-machine message from agent "${msg.from}".\n` +
@@ -1399,9 +1402,9 @@ function handleMessage(msg: FabricMessage) {
           `Use fabric_send_message with:\n` +
           `- to: "${msg.from}"\n` +
           `- type: "chat"\n` +
-          `- payload: { "text": "<compact English message>" }\n` +
+          `- payload: { "text": "compact English message" }\n` +
           `Fallback only if the tool is unavailable:\n` +
-          `echo '{"message_id":"<random>","from":"${AGENT_ID}","to":"${msg.from}","type":"chat","payload":{"text":"<compact English message>"},"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' >> /tmp/fabric-agents/mailboxes/${msg.from}.jsonl && kill -USR1 $(cat /tmp/fabric-agents/pids/${msg.from}.pid)`;
+          `echo '{"message_id":"<random>","from":"${AGENT_ID}","to":"${msg.from}","type":"chat","payload":{"text":"compact English message"},"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' >> /tmp/fabric-agents/mailboxes/${msg.from}.jsonl && kill -USR1 $(cat /tmp/fabric-agents/pids/${msg.from}.pid)`;
       const reviewerGateRetryPrompt = reviewerGateRetry
         ? `\n\nREVIEWER GATE RETRY\n` +
           `phase_id: ${reviewerGateRetry.phase_id}\n` +
@@ -3272,7 +3275,24 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
     parameters: Type.Object({
       to: Type.String({ description: "Target agent ID" }),
       type: Type.String({ description: "Message type: chat | contract | healthcheck | message | response | telegram_response | telegram_agent_response | telegram_user_message | task" }),
-      payload: Type.Object({}, { description: "JSON payload" }),
+      payload: Type.Union([
+        Type.Object({
+          telegram_message: Type.Object({
+            text: Type.String({ minLength: 1 }),
+            format: Type.Optional(Type.String()),
+            include_sender_header: Type.Optional(Type.Boolean()),
+          }),
+          sender: Type.Optional(Type.Object({
+            agent_id: Type.String(),
+            role: Type.String(),
+          })),
+          status: Type.Optional(Type.String()),
+          request_id: Type.Optional(Type.String()),
+          chat_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
+          reply_to: Type.Optional(Type.Union([Type.String(), Type.Number()])),
+        }),
+        Type.Object({}, { description: "JSON payload" }),
+      ]),
       correlation_id: Type.Optional(Type.String()),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
