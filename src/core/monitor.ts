@@ -1816,8 +1816,8 @@ function createPmTaskForAgentMessage(body: any, agentId: string): number | null 
     if (Array.isArray(body.acceptance_criteria) && body.acceptance_criteria.length > 0) {
       db.prepare(`
         INSERT INTO task_analyses
-          (task_id, version, keywords, human_note, agent_note, analysis_type, confidence_score, author_id, author_type, created_at, is_active)
-        VALUES (?, 'v1', ?, ?, ?, 'planning', 70, 'monitor', 'system', ?, 1)
+          (task_id, version, keywords, human_note, agent_note, analysis_type, confidence_score, author_id, author_type, created_at)
+        VALUES (?, 'v1', ?, ?, ?, 'planning', 70, 'monitor', 'system', ?)
       `).run(
         taskId,
         JSON.stringify(["agent-control-panel", "acceptance-criteria", agentId]),

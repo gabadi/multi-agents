@@ -221,22 +221,21 @@ function writeInitialAnalysis(db: DatabaseSync, taskId: number, input: TaskIntak
   const keywords = JSON.stringify((input.keywords ?? []).map((item) => String(item)));
 
   db.prepare(
-    `UPDATE task_analyses SET is_active = 0, invalidated_at = ? WHERE task_id = ? AND is_active = 1`
+    `UPDATE task_analyses SET invalidated = 1, invalidated_at = ? WHERE task_id = ? AND invalidated = 0`
   ).run(now, taskId);
 
   const result = db.prepare(
     `INSERT INTO task_analyses
       (task_id, version, keywords, human_note, agent_note, analysis_type,
-       confidence_score, author_id, author_type, created_at, is_active)
-     VALUES (?, ?, ?, ?, ?, 'planning', 80, ?, 'agent', ?, 1)`
+       confidence_score, author_id, author_type, created_at)
+     VALUES (?, ?, ?, ?, ?, 'planning', 80, ?, 'agent', ?)`
   ).run(
     taskId,
     version,
     keywords,
     `Task created via intelligent PM helper: ${input.title}`,
     agentNote,
-    input.coordinator_agent_id ?? null,
-    now,
+    input.coordinator_agent_id ?? null
   );
 
   return {

@@ -191,7 +191,7 @@ function readAnalysisSummaries(db: DatabaseSync, taskIds: number[]): TaskAnalysi
   const rows = db.prepare(
     `SELECT task_id, version, analysis_type, confidence_score, human_note, keywords, created_at
      FROM task_analyses
-     WHERE task_id IN (${placeholders}) AND is_active = 1
+     WHERE task_id IN (${placeholders}) AND invalidated = 0
      ORDER BY created_at DESC`
   ).all(...taskIds) as Array<{
     task_id: number;

@@ -112,8 +112,8 @@ describe("task-intake", () => {
     assert.ok(created.task.branch_name?.startsWith("fab-"));
     assert.ok(created.analysis?.id);
 
-    const analysisRow = db.prepare("SELECT agent_note, is_active FROM task_analyses WHERE task_id = ?").get(created.task.id) as { agent_note: string; is_active: number };
-    assert.strictEqual(analysisRow.is_active, 1);
+    const analysisRow = db.prepare("SELECT agent_note, invalidated FROM task_analyses WHERE task_id = ?").get(created.task.id) as { agent_note: string; invalidated: number };
+    assert.strictEqual(analysisRow.invalidated, 0);
     assert.ok(analysisRow.agent_note.includes("context_capsule: User asked for a reusable PM helper."));
     db.close();
   });

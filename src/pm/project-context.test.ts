@@ -73,8 +73,8 @@ describe("project-context", () => {
 
     db.prepare(
       `INSERT INTO task_analyses
-        (task_id, version, keywords, human_note, agent_note, analysis_type, confidence_score, author_id, author_type, created_at, is_active)
-       VALUES (?, 'v1', ?, ?, ?, 'planning', 80, 'tester', 'agent', datetime('now'), 1)`
+        (task_id, version, keywords, human_note, agent_note, analysis_type, confidence_score, author_id, author_type, created_at)
+       VALUES (?, 'v1', ?, ?, ?, 'planning', 80, 'tester', 'agent', datetime('now'))`
     ).run(taskA.id, JSON.stringify(["pm", "context"]), "summary", "agent context");
 
     const snapshot = buildProjectContextSnapshot(db, {
