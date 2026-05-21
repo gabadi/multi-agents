@@ -426,8 +426,8 @@ function initMonitorMailbox() {
 interface TelegramResponsePayload {
   text?: string;
   request_id?: string;
-  chat_id?: number;
-  reply_to?: number;
+  chat_id?: number | string;
+  reply_to?: number | string;
   status?: "ack" | "progress" | "final" | "blocked" | "error" | "router_queued" | string;
   sender?: {
     agent_id?: string;
@@ -448,6 +448,15 @@ function lifecycleFromStatus(status: string | undefined): TelegramLifecycleEvent
   if (status === "final") return "agent_final";
   if (status === "router_queued") return "router_queued";
   return "agent_update";
+}
+
+function coerceFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.length > 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
 }
 
 function normalizeTelegramOutboundPayload(payload: TelegramResponsePayload, fallbackFrom?: string): {
@@ -481,8 +490,8 @@ function normalizeTelegramOutboundPayload(payload: TelegramResponsePayload, fall
     text: `${senderHeader}${rawText}`.trim(),
     parseMode: format === "telegram_markdown" ? "Markdown" : undefined,
     requestId: typeof payload.request_id === "string" ? payload.request_id : undefined,
-    chatId: typeof payload.chat_id === "number" ? payload.chat_id : undefined,
-    replyTo: typeof payload.reply_to === "number" ? payload.reply_to : undefined,
+    chatId: coerceFiniteNumber(payload.chat_id),
+    replyTo: coerceFiniteNumber(payload.reply_to),
     status,
     lifecycle_event: lifecycleFromStatus(status),
   };
