@@ -1,7 +1,7 @@
 ---
 name: setup
 description: Initial setup skill for cmd-center-v2 agents. Covers communication, registration, launcher usage, and basic health checks.
-model: fern/glm-5
+model: fern/minimax-m2.7
 tools: read,bash
 thinking: low
 mode: rpc

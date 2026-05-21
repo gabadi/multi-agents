@@ -52,6 +52,7 @@ function parseArgs(): {
   reportTo?: string;
   workspaceSkills: string[];
   noWorkspaceSkills: boolean;
+  forceSession: boolean;
 } {
   const args = process.argv.slice(2);
   const get = (flag: string) => {
@@ -64,7 +65,7 @@ function parseArgs(): {
   const role = get("--role");
   if (!role) {
     const available = listAvailableRoles();
-    console.error("Usage: npx tsx src/core/launcher.ts --role=<role> [--agent-id=...] [--model=...] [--session=...] [--mode=interactive|rpc] [--parent-agent-id=...] [--workspace-dir=...] [--workspace-skills=a,b] [--no-workspace-skills] [--monitor] [--monitor-port=7474]");
+    console.error("Usage: npx tsx src/core/launcher.ts --role=<role> [--agent-id=...] [--model=...] [--session=...] [--force-session] [--mode=interactive|rpc] [--parent-agent-id=...] [--workspace-dir=...] [--workspace-skills=a,b] [--no-workspace-skills] [--monitor] [--monitor-port=7474]");
     console.error(`Available roles (from skills/): ${available.join(", ") || "none found"}`);
     process.exit(1);
   }
@@ -104,6 +105,7 @@ function parseArgs(): {
       .map((s) => s.trim())
       .filter(Boolean),
     noWorkspaceSkills: args.includes("--no-workspace-skills") || process.env.FABRIC_NO_WORKSPACE_SKILLS === "TRUE",
+    forceSession: args.includes("--force-session") || process.env.FABRIC_FORCE_SESSION === "TRUE",
   };
 }
 
@@ -307,7 +309,7 @@ function launchMonitor(port: number) {
 
 async function main() {
   initRuntimeLayout();
-  const { monitor, monitorPort, role, agentId, model, session, mode, skillPath, profile, parentAgentId, workspaceDir, reportTo, workspaceSkills, noWorkspaceSkills } = parseArgs();
+  const { monitor, monitorPort, role, agentId, model, session, mode, skillPath, profile, parentAgentId, workspaceDir, reportTo, workspaceSkills, noWorkspaceSkills, forceSession } = parseArgs();
 
   if (monitor) {
     launchMonitor(monitorPort);
@@ -325,7 +327,7 @@ async function main() {
   }
 
   // Determine target window: caller's current window (if inside tmux), else fallback to session arg
-  const callerWindow = detectCallerWindow();
+  const callerWindow = forceSession ? null : detectCallerWindow();
   let targetSession: string;
   let targetWindow: string;
   let paneId: string;
@@ -337,6 +339,9 @@ async function main() {
   } else {
     targetSession = session;
     targetWindow = "0";
+    if (forceSession) {
+      console.log(`[launcher] Force session enabled. Using explicit tmux session ${targetSession}.`);
+    }
     // Ensure fallback session exists
     let sessionExists = false;
     try {
@@ -375,6 +380,33 @@ async function main() {
     ...(noWorkspaceSkills ? { FABRIC_NO_WORKSPACE_SKILLS: "TRUE" } : {}),
     ...(reportTo ? { FABRIC_REPORT_TO: reportTo } : {}),
   };
+
+  // Inherit Docker and Testcontainers environment if available (for workers that run containerized tests)
+  function inheritDockerEnv(): Record<string, string> {
+    const inherited: Record<string, string> = {};
+    const dockerVars = [
+      "DOCKER_HOST",
+      "DOCKER_TLS_VERIFY",
+      "DOCKER_CERT_PATH",
+      "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
+      "TESTCONTAINERS_HOST_OVERRIDE",
+      "TESTCONTAINERS_DEVVM_TUNNEL_PORT",
+      "TESTCONTAINERS_DEVVM_REMOTE_SOCKET",
+      "TESTCONTAINERS_DEVVM_SSH_HOST",
+      "TESTCONTAINERS_DEVVM_HOST_IP",
+      "IGNORE_TESTCONTAINERS",
+    ];
+    for (const key of dockerVars) {
+      const value = process.env[key];
+      if (value !== undefined) {
+        inherited[key] = value;
+      }
+    }
+    return inherited;
+  }
+
+  // Merge Docker env into envVars
+  Object.assign(envVars, inheritDockerEnv());
 
   const envExports = Object.entries(envVars)
     .map(([k, v]) => `export ${k}=${shellQuote(v)}`)
@@ -586,6 +618,7 @@ async function main() {
       } catch {
         // ignore
       }
+      throw new Error(`Agent ${agentId} did not send alive ACK within ${ackTimeoutMs}ms`);
     }
   } else {
     console.log(`[launcher] No --report-to set. Skipping alive ACK wait.`);

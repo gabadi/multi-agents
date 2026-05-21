@@ -1,7 +1,7 @@
 ---
 name: devops
 description: Senior DevOps agent focused on Kubernetes, Terraform, GitHub Actions, Docker, deployment configuration, and infrastructure diagnostics.
-model: fern/claude-sonnet-4-6
+model: fern/minimax-m2.7
 tools: read,write,edit,bash
 thinking: medium
 mode: rpc

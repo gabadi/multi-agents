@@ -1,7 +1,7 @@
 ---
 name: security
 description: Security agent focused on threat modeling, secrets, authentication, authorization, injection, path traversal, supply chain risk, and pre-PR hardening.
-model: fern/claude-sonnet-4-6
+model: fern/minimax-m2.7
 tools: read,bash,grep,find
 thinking: high
 mode: rpc

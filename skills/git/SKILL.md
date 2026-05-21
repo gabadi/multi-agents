@@ -1,7 +1,7 @@
 ---
 name: git
 description: GitOps agent responsible for repository status checks, validation commands, branch hygiene, commits, pushes, and pull request creation/update. Only this role should perform push and PR operations.
-model: fern/claude-haiku-4-5
+model: fern/minimax-m2.7
 tools: read,bash
 thinking: low
 mode: rpc

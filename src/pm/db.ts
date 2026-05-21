@@ -191,11 +191,14 @@ export function initDb(dbPath: string = "data/project_management.db"): DatabaseS
 
   // ─────────────────────────────────────────────────────────────
   // TASK ANALYSES (chronological context per task)
+  // NOTE: Analyses persist even if task is deleted (ON DELETE SET NULL)
+  //       to preserve institutional knowledge and debugging history.
   // ─────────────────────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS task_analyses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+      project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
       version TEXT NOT NULL DEFAULT 'v1',
       keywords TEXT DEFAULT '[]',
       human_note TEXT,
@@ -209,7 +212,7 @@ export function initDb(dbPath: string = "data/project_management.db"): DatabaseS
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       invalidated_at TEXT DEFAULT NULL,
       superseded_by_id INTEGER DEFAULT NULL,
-      is_active INTEGER DEFAULT 1 CHECK(is_active IN (0,1))
+      invalidated BOOLEAN DEFAULT 0
     );
   `);
 
@@ -288,6 +291,53 @@ export function initDb(dbPath: string = "data/project_management.db"): DatabaseS
     { name: "last_error", def: "TEXT" },
   ]);
 
+  ensureColumns("task_analyses", [
+    { name: "project_id", def: "INTEGER REFERENCES projects(id) ON DELETE SET NULL" },
+  ]);
+
+  // Migration: Fix task_analyses FK to use SET NULL instead of CASCADE
+  // This preserves analysis history even when tasks are deleted
+  try {
+    const analysesTableInfo = db.prepare(`PRAGMA foreign_key_list(task_analyses)`).all() as Array<{ id: number; seq: number; table: string; from: string; to: string; on_delete: string }>;
+    const taskFk = analysesTableInfo.find(fk => fk.from === 'task_id');
+    if (taskFk && taskFk.on_delete === 'CASCADE') {
+      // Need to recreate table to change ON DELETE behavior (SQLite limitation)
+      db.exec(`
+        BEGIN TRANSACTION;
+        CREATE TABLE task_analyses_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+          version TEXT NOT NULL DEFAULT 'v1',
+          keywords TEXT DEFAULT '[]',
+          human_note TEXT,
+          agent_note TEXT NOT NULL DEFAULT '',
+          analysis_type TEXT NOT NULL DEFAULT 'general'
+            CHECK(analysis_type IN (${ANALYSIS_TYPES.map(s => `'${s}'`).join(',')})),
+          confidence_score INTEGER DEFAULT 50
+            CHECK(confidence_score >= 0 AND confidence_score <= 100),
+          author_id TEXT,
+          author_type TEXT CHECK(author_type IN ('agent','user','system')),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          invalidated_at TEXT DEFAULT NULL,
+          superseded_by_id INTEGER DEFAULT NULL,
+          invalidated BOOLEAN DEFAULT 0
+        );
+        INSERT INTO task_analyses_new 
+          SELECT id, task_id, NULL as project_id, version, keywords, human_note, agent_note, 
+                 analysis_type, confidence_score, author_id, author_type, created_at, 
+                 invalidated_at, superseded_by_id, 
+                 CASE WHEN is_active = 0 THEN 1 ELSE 0 END as invalidated
+          FROM task_analyses;
+        DROP TABLE task_analyses;
+        ALTER TABLE task_analyses_new RENAME TO task_analyses;
+        COMMIT;
+      `);
+    }
+  } catch {
+    // Ignore migration errors on fresh databases
+  }
+
   // ─────────────────────────────────────────────────────────────
   // INDEXES
   // ─────────────────────────────────────────────────────────────
@@ -311,7 +361,9 @@ export function initDb(dbPath: string = "data/project_management.db"): DatabaseS
   db.exec(`CREATE INDEX IF NOT EXISTS idx_subtask_assignments_status ON subtask_assignments(status);`);
 
   // Task Analyses indexes
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_analyses_task_active ON task_analyses(task_id, is_active);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analyses_task_active ON task_analyses(task_id, invalidated);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analyses_project ON task_analyses(project_id);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analyses_project_active ON task_analyses(project_id, invalidated);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_analyses_type ON task_analyses(analysis_type);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_analyses_created ON task_analyses(created_at);`);
 

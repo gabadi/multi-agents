@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: Headless task orchestrator. Executes planned subtasks, respects dependencies, delegates implementation to dev, delegates validation to reviewer, manages retry limits, and updates PM state.
-model: fern/gpt-5.4
+model: fern/minimax-m2.7
 tools: read,write,edit,bash
 thinking: high
 mode: rpc

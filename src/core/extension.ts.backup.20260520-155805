@@ -1419,11 +1419,8 @@ function handleMessage(msg: FabricMessage) {
       const ackLike = isAckLikeMailboxChat(text);
       const replyInstructions = ackLike
         ? `\n\nMAILBOX NOTE\n` +
-          `Treat this as a terminal ACK or closeout.\n` +
-          `If you have no new action, data, or question,\n` +
-          `end your turn silently and call no tool.\n` +
-          `Do not send empty, placeholder, or courtesy messages.\n` +
-          `Reply only if new actionable information is required.\n` +
+          `Machine-to-machine packet. This looks like a terminal ACK or informational closeout.\n` +
+          `Do not reply unless you have new actionable data or a real question.\n` +
           `Never ACK an ACK.`
         : `\n\nMAILBOX PROTOCOL\n` +
           `Machine-to-machine message from agent "${msg.from}".\n` +
@@ -1434,10 +1431,9 @@ function handleMessage(msg: FabricMessage) {
           `Use fabric_send_message with:\n` +
           `- to: "${msg.from}"\n` +
           `- type: "chat"\n` +
-          `- payload: { "text": "<your compact English reply here>" }\n` +
-          `Replace the angle-bracket placeholder with your actual message; never send it verbatim.\n` +
+          `- payload: { "text": "<compact English message>" }\n` +
           `Fallback only if the tool is unavailable:\n` +
-          `echo '{"message_id":"<random>","from":"${AGENT_ID}","to":"${msg.from}","type":"chat","payload":{"text":"<your compact English reply here>"},"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' >> /tmp/fabric-agents/mailboxes/${msg.from}.jsonl && kill -USR1 $(cat /tmp/fabric-agents/pids/${msg.from}.pid)`;
+          `echo '{"message_id":"<random>","from":"${AGENT_ID}","to":"${msg.from}","type":"chat","payload":{"text":"<compact English message>"},"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' >> /tmp/fabric-agents/mailboxes/${msg.from}.jsonl && kill -USR1 $(cat /tmp/fabric-agents/pids/${msg.from}.pid)`;
       const reviewerGateRetryPrompt = reviewerGateRetry
         ? `\n\nREVIEWER GATE RETRY\n` +
           `phase_id: ${reviewerGateRetry.phase_id}\n` +
@@ -3353,24 +3349,7 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
     parameters: Type.Object({
       to: Type.String({ description: "Target agent ID" }),
       type: Type.String({ description: "Message type: chat | contract | healthcheck | message | response | telegram_response | telegram_agent_response | telegram_user_message | task" }),
-      payload: Type.Union([
-        Type.Object({
-          telegram_message: Type.Object({
-            text: Type.String({ minLength: 1 }),
-            format: Type.Optional(Type.String()),
-            include_sender_header: Type.Optional(Type.Boolean()),
-          }),
-          sender: Type.Optional(Type.Object({
-            agent_id: Type.String(),
-            role: Type.String(),
-          })),
-          status: Type.Optional(Type.String()),
-          request_id: Type.Optional(Type.String()),
-          chat_id: Type.Optional(Type.Union([Type.String(), Type.Number()])),
-          reply_to: Type.Optional(Type.Union([Type.String(), Type.Number()])),
-        }),
-        Type.Object({}, { description: "JSON payload", minProperties: 1, additionalProperties: true }),
-      ], { description: "Message payload. For telegram_agent_response use the first variant; for other message types use any non-empty JSON object." }),
+      payload: Type.Object({}, { description: "JSON payload" }),
       correlation_id: Type.Optional(Type.String()),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
@@ -3424,24 +3403,21 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
 
         if (lifecycleStatus === "router_queued") {
           return {
-            content: [{ type: "text", text: "Call rejected: status=router_queued is monitor-owned and cannot be set by an agent." }],
+            content: [{ type: "text", text: "telegram_agent_response status=router_queued is monitor-owned and not allowed from agents" }],
             details: { sent: false, target: params.to, type: msgType, error: "invalid_status_router_queued" },
-            isError: true,
           };
         }
 
         if (typeof text !== "string" || text.trim() === "") {
           return {
-            content: [{ type: "text", text: "Call rejected: payload.telegram_message.text (or legacy payload.text) was empty." }],
+            content: [{ type: "text", text: "telegram_agent_response requires payload.telegram_message.text or legacy payload.text" }],
             details: { sent: false, target: params.to, type: msgType, error: "missing_text" },
-            isError: true,
           };
         }
         if (payload.request_id == null && payload.chat_id == null) {
           return {
-            content: [{ type: "text", text: "Call rejected: neither payload.request_id nor payload.chat_id was provided (routing missing)." }],
+            content: [{ type: "text", text: "telegram_agent_response requires payload.request_id or payload.chat_id (routing missing)" }],
             details: { sent: false, target: params.to, type: msgType, error: "missing_telegram_routing" },
-            isError: true,
           };
         }
 
@@ -3794,45 +3770,40 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
       const reviewerGate = activeContractContext?.reviewerGate;
       if (!reviewerGate || reviewerGate.lane !== "reviewer") {
         return {
-          content: [{ type: "text", text: "Call rejected: no active reviewer-lane reviewer_gate contract." }],
+          content: [{ type: "text", text: "fabric_request_reviewer_retry requires an active reviewer-lane reviewer_gate contract" }],
           details: { sent: false, error: "missing_reviewer_gate_contract" },
-          isError: true,
         };
       }
 
       const inbound = lastReviewerGateResponseContext;
       if (!inbound || inbound.reviewerGate.phase_id !== reviewerGate.phase_id || inbound.reviewerGate.lane !== "implementation") {
         return {
-          content: [{ type: "text", text: "Call rejected: no matching implementation completion response was found for the active reviewer gate." }],
+          content: [{ type: "text", text: "fabric_request_reviewer_retry requires a matching implementation completion response for the active reviewer gate" }],
           details: { sent: false, error: "missing_matching_implementation_response" },
-          isError: true,
         };
       }
 
       const implementationAttempt = inbound.reviewerGate.implementation_attempt;
       if (!isReviewerGateRetryAllowed({ reviewerGate, implementationAttempt })) {
         return {
-          content: [{ type: "text", text: `Call rejected: retry not allowed for phase ${reviewerGate.phase_id} at attempt ${implementationAttempt}.` }],
+          content: [{ type: "text", text: `Retry not allowed for phase ${reviewerGate.phase_id} at attempt ${implementationAttempt}` }],
           details: { sent: false, error: "retry_not_allowed", phase_id: reviewerGate.phase_id, implementation_attempt: implementationAttempt },
-          isError: true,
         };
       }
 
       const retryKey = `${reviewerGate.phase_id}:${implementationAttempt}`;
       if (reviewerGateRetryRequestsSent.has(retryKey)) {
         return {
-          content: [{ type: "text", text: `Call rejected: retry was already requested for phase ${reviewerGate.phase_id} attempt ${implementationAttempt}.` }],
+          content: [{ type: "text", text: `Retry already requested for phase ${reviewerGate.phase_id} attempt ${implementationAttempt}` }],
           details: { sent: false, error: "retry_already_requested", phase_id: reviewerGate.phase_id, implementation_attempt: implementationAttempt },
-          isError: true,
         };
       }
 
       const target = params.to || reviewerGate.implementation_agent_id;
       if (target !== reviewerGate.implementation_agent_id) {
         return {
-          content: [{ type: "text", text: `Call rejected: retry target mismatch. Expected ${reviewerGate.implementation_agent_id}, got ${target}.` }],
+          content: [{ type: "text", text: `Retry target mismatch. Expected ${reviewerGate.implementation_agent_id}` }],
           details: { sent: false, error: "retry_target_mismatch", expected_target: reviewerGate.implementation_agent_id, actual_target: target },
-          isError: true,
         };
       }
 
@@ -3906,9 +3877,8 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
       const blockingFailures = verificationResults.filter((r: any) => r?.passed === false && r?.required !== false);
       if (params.status === "done" && blockingFailures.length > 0) {
         return {
-          content: [{ type: "text", text: `Call rejected: status=done refused because required acceptance criteria failed: ${blockingFailures.map((r: any) => r.criterion_id).join(", ")}.` }],
+          content: [{ type: "text", text: `Refusing to report done: required acceptance criteria failed: ${blockingFailures.map((r: any) => r.criterion_id).join(", ")}` }],
           details: { sent: false, target: params.to, status: params.status, blocking_failures: blockingFailures },
-          isError: true,
         };
       }
 
@@ -4291,220 +4261,369 @@ const REPORT_TO = process.env.FABRIC_REPORT_TO || PARENT_AGENT_ID || "";
     },
   });
 
-  // ── Fern Model Management Tools (Simple Inline Version) ──
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Model Management Helper Functions
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const FERN_BASE_URL = "https://fern.addi.com/v1";
   const MODELS_JSON_PATH = `${process.env.HOME || "/Users/jescobar"}/.pi/agent/models.json`;
 
-  const KNOWN_MODELS: Record<string, any> = {
-    "gemini-3.1-flash-lite": { name: "Gemini 3.1 Flash Lite", cost: { input: 0.25, output: 1.5 }, contextWindow: 1048576 },
-    "minimax-m2.7": { name: "MiniMax M2.7", cost: { input: 0.3, output: 1.2 }, contextWindow: 128000 },
-    "qwen3p6-plus": { name: "Qwen 3.6 Plus", cost: { input: 0.5, output: 3.0 }, contextWindow: 128000 },
-    "kimi-k2.5": { name: "Kimi K2.5", cost: { input: 0.6, output: 3.0 }, contextWindow: 262144 },
-    "kimi-k2.6": { name: "Kimi K2.6", cost: { input: 0.95, output: 4.0 }, contextWindow: 128000 },
-    "claude-haiku-4-5": { name: "Claude Haiku 4.5", cost: { input: 1.0, output: 5.0 }, contextWindow: 200000 },
-    "glm-5": { name: "GLM-5", cost: { input: 1.0, output: 3.2 }, contextWindow: 128000 },
-    "glm-5p1": { name: "GLM-5.1", cost: { input: 1.4, output: 4.4 }, contextWindow: 128000 },
-    "gpt-5.3-codex": { name: "GPT-5.3 Codex", cost: { input: 1.75, output: 14.0 }, contextWindow: 272000 },
-    "gemini-3.1-pro": { name: "Gemini 3.1 Pro", cost: { input: 2.0, output: 12.0 }, contextWindow: 1048576 },
-    "gpt-5.4": { name: "GPT-5.4", cost: { input: 2.5, output: 15.0 }, contextWindow: 1050000 },
-    "gpt-5.5": { name: "GPT-5.5", cost: { input: 2.5, output: 15.0 }, contextWindow: 1050000 },
-    "claude-sonnet-4-6": { name: "Claude Sonnet 4.6", cost: { input: 3.0, output: 15.0 }, contextWindow: 1000000 },
-    "claude-opus-4-6": { name: "Claude Opus 4.6", cost: { input: 5.0, output: 25.0 }, contextWindow: 1000000 },
-    "claude-opus-4-7": { name: "Claude Opus 4.7", cost: { input: 5.0, output: 25.0 }, contextWindow: 1000000 },
+  interface FernModel {
+    id: string;
+    object: string;
+    created: number;
+    owned_by: string;
+  }
+
+  interface ModelInfo {
+    id: string;
+    name?: string;
+    reasoning?: boolean;
+    input?: string[];
+    contextWindow?: number;
+    maxTokens?: number;
+    cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+    api?: string;
+  }
+
+  // Known model configurations (fallback when API doesn't provide full info)
+  const KNOWN_MODELS: Record<string, Partial<ModelInfo>> = {
+    "gemini-3.1-flash-lite": {
+      name: "Gemini 3.1 Flash Lite",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 1048576,
+      maxTokens: 65536,
+      cost: { input: 0.25, output: 1.5, cacheRead: 0, cacheWrite: 0 },
+    },
+    "minimax-m2.7": {
+      name: "MiniMax M2.7",
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 128000,
+      maxTokens: 16384,
+      cost: { input: 0.3, output: 1.2, cacheRead: 0, cacheWrite: 0 },
+    },
+    "qwen3p6-plus": {
+      name: "Qwen 3.6 Plus",
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 128000,
+      maxTokens: 16384,
+      cost: { input: 0.5, output: 3.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "kimi-k2.5": {
+      name: "Kimi K2.5",
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 262144,
+      maxTokens: 262144,
+      cost: { input: 0.6, output: 3.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "kimi-k2.6": {
+      name: "Kimi K2.6",
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 128000,
+      maxTokens: 16384,
+      cost: { input: 0.95, output: 4.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "claude-haiku-4-5": {
+      name: "Claude Haiku 4.5",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 200000,
+      maxTokens: 64000,
+      cost: { input: 1.0, output: 5.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "glm-5": {
+      name: "GLM-5",
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 128000,
+      maxTokens: 16384,
+      cost: { input: 1.0, output: 3.2, cacheRead: 0, cacheWrite: 0 },
+    },
+    "glm-5p1": {
+      name: "GLM-5.1",
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 128000,
+      maxTokens: 16384,
+      cost: { input: 1.4, output: 4.4, cacheRead: 0, cacheWrite: 0 },
+    },
+    "gpt-5.3-codex": {
+      name: "GPT-5.3 Codex",
+      api: "openai-responses",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 272000,
+      maxTokens: 128000,
+      cost: { input: 1.75, output: 14.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "gemini-3.1-pro": {
+      name: "Gemini 3.1 Pro",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 1048576,
+      maxTokens: 65536,
+      cost: { input: 2.0, output: 12.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "gpt-5.4": {
+      name: "GPT-5.4",
+      api: "openai-responses",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 1050000,
+      maxTokens: 128000,
+      cost: { input: 2.5, output: 15.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "gpt-5.5": {
+      name: "GPT-5.5",
+      api: "openai-responses",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 1050000,
+      maxTokens: 128000,
+      cost: { input: 2.5, output: 15.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "claude-sonnet-4-6": {
+      name: "Claude Sonnet 4.6",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 1000000,
+      maxTokens: 64000,
+      cost: { input: 3.0, output: 15.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "claude-opus-4-6": {
+      name: "Claude Opus 4.6",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      cost: { input: 5.0, output: 25.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "claude-opus-4-7": {
+      name: "Claude Opus 4.7",
+      reasoning: true,
+      input: ["text", "image"],
+      contextWindow: 1000000,
+      maxTokens: 128000,
+      cost: { input: 5.0, output: 25.0, cacheRead: 0, cacheWrite: 0 },
+    },
+    "all-proxy-models": {
+      name: "All Proxy Models (fallback)",
+      reasoning: false,
+      input: ["text"],
+      contextWindow: 128000,
+      maxTokens: 16384,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    },
   };
 
-  pi.registerTool({
-    name: "fern_fetch_models",
-    label: "Fetch Fern Models",
-    description: "Fetch available models from fern proxy and optionally update models.json. Sorted by input cost (lowest first).",
-    promptSnippet: "Fetch models from fern API",
-    parameters: Type.Object({
-      provider: Type.Optional(Type.String({ description: "Provider (default: fern)" })),
-      update_json: Type.Optional(Type.Boolean({ description: "Update models.json" })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      try {
-        const apiKey = process.env.LITELLM_API_KEY || "";
-        if (!apiKey) {
-          return { content: [{ type: "text", text: "Error: LITELLM_API_KEY not set" }], details: { error: "No API key" } };
-        }
+  async function fetchModels(input: { provider: string; update_json: boolean }) {
+    const apiKey = process.env.LITELLM_API_KEY || process.env.FERN_API_KEY || null;
+    if (!apiKey) {
+      return {
+        success: false as const,
+        models: [] as { id: string; name?: string; contextWindow?: number; maxTokens?: number; inputCost?: number; outputCost?: number; reasoning?: boolean }[],
+        error: "No API key found. Set LITELLM_API_KEY or FERN_API_KEY environment variable.",
+      };
+    }
 
-        const response = await fetch(`${FERN_BASE_URL}/models`, {
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" }
-        });
+    try {
+      const response = await fetch(`${FERN_BASE_URL}/models`, {
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
 
-        if (!response.ok) {
-          return { content: [{ type: "text", text: `API error: ${response.status}` }], details: { error: response.statusText } };
-        }
+      if (!response.ok) {
+        return {
+          success: false as const,
+          models: [] as { id: string; name?: string; contextWindow?: number; maxTokens?: number; inputCost?: number; outputCost?: number; reasoning?: boolean }[],
+          error: `API error: ${response.status} ${response.statusText}`,
+        };
+      }
 
-        const data = await response.json() as { data?: Array<{id: string}> };
-        const models = (data.data || []).map((m: any) => {
+      const data = await response.json() as { data?: FernModel[] };
+      const models = data.data || [];
+
+      // Merge with known model info and sort by input cost
+      const enrichedModels = models
+        .map((m: FernModel) => {
           const known = KNOWN_MODELS[m.id] || {};
           return {
             id: m.id,
             name: known.name || m.id,
-            inputCost: known.cost?.input || 0,
-            outputCost: known.cost?.output || 0,
-            contextWindow: known.contextWindow || 128000,
+            contextWindow: known.contextWindow,
+            maxTokens: known.maxTokens,
+            inputCost: known.cost?.input,
+            outputCost: known.cost?.output,
+            reasoning: known.reasoning ?? false,
           };
-        }).sort((a: any, b: any) => a.inputCost - b.inputCost);
+        })
+        .sort((a, b) => (a.inputCost ?? 999999) - (b.inputCost ?? 999999));
 
-        if (params.update_json && existsSync(MODELS_JSON_PATH)) {
-          try {
-            const existing = JSON.parse(readFileSync(MODELS_JSON_PATH, "utf8"));
-            existing.providers = existing.providers || {};
-            existing.providers.fern = existing.providers.fern || {};
-            existing.providers.fern.models = models.map((m: any) => ({
-              id: m.id,
-              name: m.name,
-              reasoning: false,
-              input: ["text"],
-              contextWindow: m.contextWindow,
-              maxTokens: 16384,
-              cost: { input: m.inputCost, output: m.outputCost, cacheRead: 0, cacheWrite: 0 }
-            }));
-            writeFileSync(MODELS_JSON_PATH, JSON.stringify(existing, null, 2));
-          } catch (e) {
-            console.error("Failed to update models.json:", e);
-          }
+      // Update models.json if requested
+      let updated = false;
+      if (input.update_json && existsSync(MODELS_JSON_PATH)) {
+        try {
+          const existingJson = JSON.parse(readFileSync(MODELS_JSON_PATH, "utf8"));
+          
+          const newModels = enrichedModels.map(m => ({
+            id: m.id,
+            name: m.name,
+            reasoning: m.reasoning,
+            input: KNOWN_MODELS[m.id]?.input || ["text"],
+            contextWindow: m.contextWindow || 128000,
+            maxTokens: m.maxTokens || 16384,
+            cost: {
+              input: m.inputCost ?? 0,
+              output: m.outputCost ?? 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+            },
+            ...(KNOWN_MODELS[m.id]?.api ? { api: KNOWN_MODELS[m.id].api } : {}),
+          }));
+
+          existingJson.providers = existingJson.providers || {};
+          existingJson.providers.fern = existingJson.providers.fern || {};
+          existingJson.providers.fern.models = newModels;
+
+          writeFileSync(MODELS_JSON_PATH, JSON.stringify(existingJson, null, 2));
+          updated = true;
+        } catch (err) {
+          console.error("Failed to update models.json:", err);
         }
-
-        const table = models.map((m: any) => `| ${m.id} | ${m.name} | $${m.inputCost}/M | $${m.outputCost}/M | ${Math.round(m.contextWindow/1000)}k |`).join("\n");
-        return {
-          content: [{ type: "text", text: `| Model | Name | Input | Output | Context |\n|-------|------|-------|--------|---------|\n${table}` }],
-          details: { count: models.length, updated: params.update_json }
-        };
-      } catch (err: any) {
-        return { content: [{ type: "text", text: `Error: ${err.message}` }], details: { error: err.message } };
       }
+
+      return {
+        success: true as const,
+        models: enrichedModels,
+        updated,
+      };
+
+    } catch (err: any) {
+      return {
+        success: false as const,
+        models: [] as { id: string; name?: string; contextWindow?: number; maxTokens?: number; inputCost?: number; outputCost?: number; reasoning?: boolean }[],
+        error: `Error fetching models: ${err.message}`,
+      };
+    }
+  }
+
+  async function getConsumption(input: { provider: string; model_id?: string }) {
+    // Placeholder - consumption tracking not yet implemented via API
+    return {
+      success: true as const,
+      consumption: [] as { model: string; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost: { input: number; output: number; total: number } }[],
+      totalCost: 0,
+      error: "Consumption tracking not yet implemented via API. Check logs or dashboard for usage.",
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Model Management Tools
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  pi.registerTool({
+    name: "fern_fetch_models",
+    label: "Fetch Fern Models",
+    description: "Fetch available models from the fern proxy API and optionally update models.json. Returns models sorted by input cost (lowest first).",
+    promptSnippet: "Fetch and list available models from fern proxy",
+    parameters: Type.Object({
+      provider: Type.String({ description: "Provider to fetch models from (default: fern)" }),
+      update_json: Type.Boolean({ description: "Update models.json with fetched models" }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const result = await fetchModels({
+        provider: params.provider || "fern",
+        update_json: params.update_json || false,
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text", text: `Error: ${result.error}` }],
+          details: result,
+        };
+      }
+
+      const text = result.models
+        .map(m => `| ${m.id} | ${m.name || '-'} | ${m.inputCost ?? '-'} | ${m.outputCost ?? '-'} | ${m.contextWindow ? Math.round(m.contextWindow/1000)+'k' : '-'} |`)
+        .join('\n');
+
+      return {
+        content: [{
+          type: "text",
+          text: `| Model | Name | Input Cost | Output Cost | Context |\n|-------|------|------------|-------------|---------|\n${text}${result.updated ? '\n\nUpdated models.json' : ''}`,
+        }],
+        details: result,
+      };
     },
   });
 
   pi.registerTool({
     name: "fern_get_consumption",
     label: "Get Fern Consumption",
-    description: "Get consumption/quota status from fern proxy API",
-    promptSnippet: "Get consumption and quota from fern",
+    description: "Get consumption/cost data by model from the fern proxy. Shows token usage and costs per model.",
+    promptSnippet: "Get consumption and costs by model",
     parameters: Type.Object({
       model_id: Type.Optional(Type.String({ description: "Filter by specific model ID" })),
+      provider: Type.String({ description: "Provider to check consumption for (default: fern)" }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      try {
-        const apiKey = process.env.LITELLM_API_KEY || "";
-        if (!apiKey) {
-          return { content: [{ type: "text", text: "Error: LITELLM_API_KEY not set" }], details: { error: "No API key" } };
-        }
+      const result = await getConsumption({
+        provider: params.provider || "fern",
+        model_id: params.model_id,
+      });
 
-        // Call the user/info endpoint (based on check-quota-status_sh.sh)
-        const response = await fetch(`${FERN_BASE_URL}/user/info`, {
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" }
-        });
-
-        if (!response.ok) {
-          return { 
-            content: [{ type: "text", text: `API error: ${response.status} ${response.statusText}` }], 
-            details: { error: response.statusText } 
-          };
-        }
-
-        const data = await response.json() as any;
-        
-        // Extract user info
-        const userInfo = data.user_info || {};
-        const teams = data.teams || [];
-        const team = teams[0] || {};
-        const keys = team.keys || [];
-
-        // Calculate spend from keys for this user
-        const userId = userInfo.user_id || "unknown";
-        const userSpend = keys
-          .filter((k: any) => k.user_id === userId)
-          .reduce((sum: number, k: any) => sum + (k.spend || 0), 0);
-
-        const userBudget = userInfo.max_budget || 0;
-        const userPercent = userBudget > 0 ? (userSpend / userBudget * 100).toFixed(1) : "0";
-        const resetDate = userInfo.budget_reset_at ? userInfo.budget_reset_at.split("T")[0] : "N/A";
-
-        // Team info
-        const teamSpend = team.spend || 0;
-        const teamBudget = team.max_budget || 0;
-        const teamPercent = teamBudget > 0 ? (teamSpend / teamBudget * 100).toFixed(1) : "0";
-        const teamResetDate = team.budget_reset_at ? team.budget_reset_at.split("T")[0] : "N/A";
-
-        // Build key usage table (filtered by model if specified)
-        let userKeys = keys.filter((k: any) => k.user_id === userId);
-        if (params.model_id) {
-          userKeys = userKeys.filter((k: any) => 
-            k.model_aliases?.includes(params.model_id) || 
-            k.model_names?.includes(params.model_id)
-          );
-        }
-
-        const keyRows = userKeys.map((k: any) => {
-          const keyName = k.key_alias || k.key_name || "Unnamed";
-          const spend = k.spend || 0;
-          const models = k.model_aliases?.join(", ") || k.model_names?.join(", ") || "All";
-          return `| ${keyName} | $${spend.toFixed(4)} | ${models.substring(0, 30)}${models.length > 30 ? "..." : ""} |`;
-        }).join("\n");
-
-        const result = `## 📊 PERSONAL USAGE
-
-| Metric | Value |
-|--------|-------|
-| Budget | $${userBudget.toFixed(2)} |
-| Spent | $${userSpend.toFixed(4)} |
-| Usage | ${userPercent}% |
-| Reset Date | ${resetDate} |
-
-## 👥 TEAM USAGE (${team.team_alias || "Team"})
-
-| Metric | Value |
-|--------|-------|
-| Budget | $${teamBudget.toFixed(2)} |
-| Spent | $${teamSpend.toFixed(4)} |
-| Usage | ${teamPercent}% |
-| Reset Date | ${teamResetDate} |
-
-## 🔑 KEYS (${userKeys.length})
-
-| Key | Spend | Models |
-|-----|-------|--------|
-${keyRows || "| No keys found | - | - |"}
-`;
-
+      if (!result.success) {
         return {
-          content: [{ type: "text", text: result }],
-          details: { 
-            userId, 
-            userSpend, 
-            userBudget, 
-            teamSpend, 
-            teamBudget,
-            keyCount: userKeys.length 
-          }
+          content: [{ type: "text", text: `Error: ${result.error}` }],
+          details: result,
         };
-
-      } catch (err: any) {
-        return { content: [{ type: "text", text: `Error: ${err.message}` }], details: { error: err.message } };
       }
+
+      if (result.consumption.length === 0) {
+        return {
+          content: [{ type: "text", text: `No consumption data available. ${result.error || ''}` }],
+          details: result,
+        };
+      }
+
+      const text = result.consumption
+        .map(c => `| ${c.model} | ${c.inputTokens.toLocaleString()} | ${c.outputTokens.toLocaleString()} | $${c.cost.input.toFixed(4)} | $${c.cost.output.toFixed(4)} | $${c.cost.total.toFixed(4)} |`)
+        .join('\n');
+
+      return {
+        content: [{
+          type: "text",
+          text: `| Model | Input Tokens | Output Tokens | Input Cost | Output Cost | Total |\n|-------|--------------|---------------|------------|-------------|-------|\n${text}\n\n**Total Cost: $${result.totalCost.toFixed(4)}**`,
+        }],
+        details: result,
+      };
     },
   });
 
   // ── Log available tools on extension load ──
+  // Use setTimeout to ensure all tools are registered before listing
   setTimeout(() => {
     const allTools = pi.getAllTools();
     const fabricTools = allTools.filter((t) => t.name.startsWith("fabric_")).map((t) => t.name);
     const pmTools = allTools.filter((t) => t.name.startsWith("pm_")).map((t) => t.name);
-    const fernTools = allTools.filter((t) => t.name.startsWith("fern_")).map((t) => t.name);
+    const otherTools = allTools.filter((t) => !t.name.startsWith("fabric_") && !t.name.startsWith("pm_")).map((t) => t.name);
     
     console.log(`[fabric] Extension loaded with ${allTools.length} tools:`);
     console.log(`[fabric]   Fabric tools (${fabricTools.length}): ${fabricTools.join(", ") || "none"}`);
     console.log(`[fabric]   PM tools (${pmTools.length}): ${pmTools.join(", ") || "none"}`);
-    console.log(`[fabric]   Fern tools (${fernTools.length}): ${fernTools.join(", ") || "none"}`);
+    console.log(`[fabric]   Other tools (${otherTools.length}): ${otherTools.slice(0, 5).join(", ")}${otherTools.length > 5 ? "..." : ""}`);
     
+    // Also show in UI if there's an active context
     if (activeCtx) {
       activeCtx.ui.notify(
-        `🔧 Fabric loaded: ${fabricTools.length} fabric, ${pmTools.length} PM, ${fernTools.length} fern tools`,
+        `🔧 Fabric loaded: ${fabricTools.length} fabric tools, ${pmTools.length} PM tools`,
         "info"
       );
     }

@@ -1,7 +1,7 @@
 ---
 name: coordinator
 description: Command center coordinator for cmd-center-v2. Use this role to launch agents, create projects/tasks, delegate work, monitor the mesh, and coordinate cooperative AI agents.
-model: fern/gpt-5.4
+model: fern/minimax-m2.7
 tools: read,write,edit,bash
 thinking: high
 mode: interactive
@@ -132,9 +132,23 @@ Contract language rules:
 - `description`, `acceptance_criteria[].description`, and `manual.params.instructions` must be machine-oriented, imperative, and compact.
 - Translate human requests before sending contracts. Do not forward Spanish or human-conversational prose to workers.
 
-## Project Management
+## Project Management & Task Analyses
 
 PM state lives in `/tmp/fabric-agents/projects.sqlite`.
+
+Task analyses capture chronological context (errors, configs, decisions, query results) using:
+- `pm_write_analysis` - Persist task context with version auto-increment
+- `pm_read_analyses` - Retrieve analyses (filtered by task_id, keywords, type)
+- `pm_inject_task_context` - Inject agent_note directly into chat
+
+Analysis fields:
+- `agent_note` (required): Dense plain text for agent decision-making
+- `human_note` (optional): Short human summary (~500 chars)
+- `analysis_type`: debugging|root_cause|planning|review|validation|evaluation|retro|decision|general
+- `confidence`: 0-100
+- `keywords`: Array of searchable terms
+
+Analyses use `invalidated` flag (not `is_active`). Only non-invalidated analyses are active by default.
 
 The coordinator may create top-level projects/tasks and assign owners, but task-local context belongs to the owning sub-coordinator. When creating a follow-up task from a previous task, prefer that the sub-coordinator or recovery sub-coordinator creates the context capsule and derived work records.
 

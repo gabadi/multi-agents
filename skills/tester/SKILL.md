@@ -1,7 +1,7 @@
 ---
 name: tester
 description: QA agent specialized in reproducing bugs, writing/running tests, and validating acceptance criteria without modifying production logic unless explicitly authorized.
-model: fern/claude-sonnet-4-6
+model: fern/minimax-m2.7
 tools: read,write,edit,bash,grep,find
 thinking: medium
 mode: rpc

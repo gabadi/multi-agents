@@ -336,6 +336,12 @@
       gap: 2px;
       flex: 0 0 auto;
     }
+    .acp-dock {
+      min-height: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
     .agent-detail-panel {
       min-height: 0;
       flex: 1;
@@ -430,6 +436,19 @@
     .agent-category-panel.collapsed .agent-category-toggle-icon { transform: rotate(0deg); }
     .agent-category-panel.collapsed .agent-category-body { display: none; }
     .agent-category-body { min-width: 0; }
+    .agent-group-note {
+      margin-left: auto;
+      margin-right: 10px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--muted);
+    }
+    .agent-section.alert {
+      border-color: rgba(249,115,22,.55);
+      box-shadow: inset 0 0 0 1px rgba(249,115,22,.2);
+    }
     .agent-lane {
       margin-bottom: 0;
       padding: 12px;
@@ -635,6 +654,277 @@
     }
     .event-time { color: var(--muted); margin-right: 8px; }
 
+    .ops-shell {
+      display: grid;
+      grid-template-columns: minmax(220px, .9fr) minmax(540px, 1.8fr) minmax(280px, 1fr);
+      gap: 12px;
+      align-items: start;
+      min-height: calc(100vh - 180px);
+    }
+    .ops-nav-panel, .ops-main-panel, .ops-chat-rail {
+      min-height: 0;
+      background: var(--panel);
+    }
+    .ops-chat-rail {
+      position: sticky;
+      top: 74px;
+      height: calc(100vh - 88px);
+      max-height: calc(100vh - 88px);
+      min-height: calc(100vh - 88px);
+      overflow: hidden;
+    }
+    .ops-panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ops-nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .ops-nav-item {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .ops-nav-item.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(6,182,212,.25) inset;
+    }
+    .ops-tree-project {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15,17,23,.38);
+      overflow: hidden;
+    }
+    .ops-tree-project-head {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .ops-tree-project-head.active { background: rgba(6,182,212,.16); }
+    .ops-tree-project-head .muted { font-size: 11px; }
+    .ops-tree-body {
+      border-top: 1px solid var(--border);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ops-tree-task {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(31,35,48,.65);
+      padding: 6px 8px;
+    }
+    .ops-tree-task.active {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(6,182,212,.24) inset;
+    }
+    .ops-tree-task-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .ops-tree-task-title { font-size: 12px; font-weight: 600; }
+    .ops-tree-task-owners { margin-top: 4px; font-size: 11px; color: var(--muted); }
+    .ops-tree-subtasks {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ops-tree-subtask {
+      border-radius: 6px;
+      border: 1px dashed var(--border);
+      padding: 4px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      background: rgba(17,20,29,.65);
+    }
+    .ops-tree-subtask.active {
+      border-style: solid;
+      border-color: var(--cyan);
+      background: rgba(6,182,212,.12);
+    }
+    .ops-detail-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .ops-task-detail-panel {
+      border: 1px solid rgba(6,182,212,.45);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(6,182,212,.08), rgba(6,182,212,.02));
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ops-task-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .ops-detail-subtasks {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ops-detail-kv {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 10px;
+      font-size: 12px;
+    }
+    .ops-detail-error {
+      border: 1px solid rgba(239,68,68,.5);
+      border-radius: 8px;
+      background: rgba(239,68,68,.1);
+      color: #fecaca;
+      padding: 8px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ops-detail-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .ops-main-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .blocker-panel {
+      border: 1px solid rgba(249,115,22,.55);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(249,115,22,.1), rgba(239,68,68,.06));
+      padding: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    .blocker-panel.clear {
+      border-color: rgba(34,197,94,.4);
+      background: rgba(34,197,94,.08);
+    }
+    .blocker-list {
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .blocker-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(15,17,23,.55);
+      padding: 8px;
+      font-size: 12px;
+    }
+    .blocker-item strong { margin-right: 6px; }
+    .blocker-item.sev-high { border-color: rgba(239,68,68,.5); }
+    .blocker-item.sev-medium { border-color: rgba(249,115,22,.45); }
+    .ops-lane-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      padding: 10px;
+    }
+    .ops-event-log {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15,17,23,.58);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      max-height: 32vh;
+      overflow: hidden;
+    }
+    .ops-event-log.collapsed {
+      grid-template-rows: auto;
+      max-height: 44px;
+    }
+    .ops-event-log.collapsed #opsEventLogList { display: none; }
+    .ops-event-log-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    #opsEventLogList {
+      padding: 10px;
+      overflow: auto;
+      gap: 8px;
+    }
+    .ops-rail-body {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .ops-agent-header { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 10px; }
+    .ops-agent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .ops-acp-dock {
+      min-height: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .ops-chat-rail .acp-dock,
+    .ops-chat-rail .acp-panel {
+      flex: 1;
+      min-height: 0;
+    }
+    .ops-chat-rail .acp-messages {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .ops-chat-rail .acp-composer {
+      flex: 0 0 auto;
+    }
+    .ops-link { color: var(--cyan); text-decoration: none; }
+    .ops-link:hover { text-decoration: underline; }
+
     .log-panel {
       border-top: 1px solid var(--border);
       background: var(--panel);
@@ -698,6 +988,9 @@
     .subtask-running .subtask-row { grid-template-columns: 60px 1fr 1fr; }
 
     @media (max-width: 1100px) {
+      .ops-shell { grid-template-columns: 1fr; }
+      .ops-chat-rail { position: static; height: auto; max-height: none; min-height: 0; }
+      .ops-rail-body { max-height: none; }
       .agents-workspace { grid-template-columns: 1fr; }
       .agent-detail-shell { position: static; max-height: none; }
       .agent-detail-panel { min-height: 0; }
@@ -706,6 +999,8 @@
 
     @media (max-width: 600px) {
       .grid { grid-template-columns: 1fr; }
+      .ops-main-grid { grid-template-columns: 1fr; }
+      .ops-detail-kv { grid-template-columns: 1fr; }
       .topbar { align-items: flex-start; flex-direction: column; }
       .status-line { justify-content: flex-start; }
       .kanban { overflow-x: auto; }
@@ -724,7 +1019,8 @@
       <div class="title-wrap">
         <div class="title">🔮 Fabric Monitor</div>
         <nav class="tabs">
-          <button class="tab-btn active" data-tab="agents">Agents</button>
+          <button class="tab-btn active" data-tab="operations">Operations</button>
+          <button class="tab-btn" data-tab="agents">Agents</button>
           <button class="tab-btn" data-tab="projects">Projects</button>
           <button class="tab-btn" data-tab="tasks">Tasks</button>
           <button class="tab-btn" data-tab="timeline">Timeline</button>
@@ -745,46 +1041,66 @@
     </header>
 
     <main class="content">
-      <section class="view active" id="view-agents">
+      <section class="view active" id="view-operations">
+        <div class="ops-shell">
+          <aside class="ops-nav-panel card">
+            <div class="ops-panel-head">
+              <strong>Operations Navigation</strong>
+              <span class="muted" id="opsAgentTotal">0 agents</span>
+            </div>
+            <div id="opsNavList" class="ops-nav-list"></div>
+          </aside>
+
+          <section class="ops-main-panel card">
+            <div class="ops-panel-head">
+              <strong id="opsLaneTitle">Live Coordination</strong>
+              <div class="chip-row">
+                <span class="chip" id="opsTasksCount">Tasks: 0</span>
+                <span class="chip" id="opsProjectsCount">Projects: 0</span>
+              </div>
+            </div>
+            <div id="blockerPanel" class="blocker-panel clear"></div>
+            <div id="opsMainGrid" class="ops-main-grid"></div>
+            <div id="opsEventLogPanel" class="ops-event-log">
+              <div class="ops-event-log-head">
+                <strong>Live Operations Event Log</strong>
+                <button class="btn" data-action="toggle-ops-log">Collapse</button>
+              </div>
+              <ul id="opsEventLogList" class="event-log-list"></ul>
+            </div>
+          </section>
+
+          <aside class="ops-chat-rail card">
+            <div class="ops-panel-head">
+              <strong>Agent Detail / Chat Rail</strong>
+              <span class="muted" id="opsRailAgent">No agent selected</span>
+            </div>
+            <div id="opsRailBody" class="ops-rail-body">
+              <div id="opsRailSummary" class="ops-agent-header">
+                <p class="muted">Reserved rail for selected agent details, quick controls, and live chat context.</p>
+              </div>
+              <div id="opsAcpDock" class="ops-acp-dock"></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-agents">
         <div class="agents-workspace">
           <section class="agents-inventory">
             <div class="agent-controls">
               <div class="stats-bar" id="agentStatsBar"></div>
+              <label class="muted" for="agentGroupingMode">Group by</label>
+              <select id="agentGroupingMode" title="Agent inventory grouping mode">
+                <option value="hierarchy">Hierarchy</option>
+                <option value="role">Role</option>
+                <option value="status">Status</option>
+                <option value="lifecycle">Lifecycle</option>
+              </select>
               <input type="search" id="agentSearch" class="agent-search" placeholder="🔍 Filtrar agentes..." />
             </div>
 
-            <div class="agent-section agent-category-panel" id="coordinatorsSection" data-category="coordinators">
-              <button class="agent-category-header" data-action="toggle-agent-category" data-category="coordinators" aria-expanded="true">
-                <span class="agent-category-toggle-icon">▶</span>
-                <span class="agent-category-title">👑 Coordinators</span>
-                <span id="coordinatorsCount" class="muted" style="margin-left:auto;">(0)</span>
-              </button>
-              <div class="agent-category-body">
-                <div id="coordinatorsGrid" class="agent-lane"></div>
-              </div>
-            </div>
-
-            <div class="agent-section agent-category-panel" id="workersActiveSection" data-category="running">
-              <button class="agent-category-header" data-action="toggle-agent-category" data-category="running" aria-expanded="true">
-                <span class="agent-category-toggle-icon">▶</span>
-                <span class="agent-category-title">⚡ Running</span>
-                <span id="workersActiveCount" class="muted" style="margin-left:auto;">(0)</span>
-              </button>
-              <div class="agent-category-body">
-                <div id="workersActiveGrid" class="agent-lane"></div>
-              </div>
-            </div>
-
-            <div class="agent-section agent-category-panel" id="workersIdleSection" data-category="idle">
-              <button class="agent-category-header" data-action="toggle-agent-category" data-category="idle" aria-expanded="true">
-                <span class="agent-category-toggle-icon">▶</span>
-                <span class="agent-category-title">💤 Idle</span>
-                <span id="workersIdleCount" class="muted" style="margin-left:auto;">(0)</span>
-              </button>
-              <div class="agent-category-body">
-                <div id="workersIdleGrid" class="agent-lane"></div>
-              </div>
-            </div>
+            <div id="agentGroupedSections"></div>
 
             <div id="historyAgentsPanel" class="history-panel collapsed">
               <div class="history-header" data-action="toggle-history">
@@ -799,17 +1115,19 @@
 
           <aside class="agent-detail-shell">
             <div id="acpHeader" hidden aria-hidden="true"></div>
-            <section class="acp-panel agent-detail-panel">
-              <div id="acpMessages" class="acp-messages"></div>
-              <div class="acp-composer">
-                <textarea id="acpInput" class="acp-input" placeholder="Escribe un mensaje para el agente seleccionado…"></textarea>
-                <div class="actions" style="margin:0;">
-                  <button class="btn" data-action="send-acp-message">Enviar 📤</button>
-                  <button class="btn" data-action="open-acp-task-modal">📋 Tarea</button>
-                  <button class="btn" data-action="refresh-acp">Refresh</button>
+            <div id="acpDockAgents" class="acp-dock">
+              <section id="acpPanel" class="acp-panel agent-detail-panel">
+                <div id="acpMessages" class="acp-messages"></div>
+                <div class="acp-composer">
+                  <textarea id="acpInput" class="acp-input" placeholder="Escribe un mensaje para el agente seleccionado…"></textarea>
+                  <div class="actions" style="margin:0;">
+                    <button class="btn" data-action="send-acp-message">Enviar 📤</button>
+                    <button class="btn" data-action="open-acp-task-modal">📋 Tarea</button>
+                    <button class="btn" data-action="refresh-acp">Refresh</button>
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </div>
           </aside>
         </div>
       </section>
@@ -880,11 +1198,30 @@
 
   <script>
     const API = ''; // Rutas relativas — dashboard servido desde mismo servidor
+    const UI_STATE_KEY = 'dashboardUiStateV1';
+
+    function readUiState() {
+      try {
+        const raw = localStorage.getItem(UI_STATE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    const persistedUiState = readUiState();
+
     const state = {
-      activeTab: 'agents',
+      activeTab: persistedUiState.activeTab || 'operations',
+      // Normalized entity store (v2 monitor adapters)
       agents: new Map(),
       projects: new Map(),
       tasks: new Map(),
+      subtasks: new Map(),
+      taskSubtasks: new Map(),
+      projectTasks: new Map(),
       allEvents: [],
       logEvents: [],
       logPaused: false,
@@ -893,21 +1230,17 @@
       projectEventSince: 0,
       showOnlyActive: localStorage.getItem('filterActive') === 'true',
       agentSearchQuery: '',
-      agentCategoryCollapsed: (() => {
+      agentGroupingMode: persistedUiState.agentGroupingMode || localStorage.getItem('agentGroupingMode') || 'hierarchy',
+      agentGroupCollapsed: (() => {
         try {
-          const parsed = JSON.parse(localStorage.getItem('agentCategoryCollapsed') || '{}');
-          return {
-            coordinators: Boolean(parsed.coordinators),
-            running: Boolean(parsed.running),
-            idle: Boolean(parsed.idle),
-          };
+          return JSON.parse(localStorage.getItem('agentGroupCollapsed') || '{}') || {};
         } catch {
-          return { coordinators: false, running: false, idle: false };
+          return {};
         }
       })(),
       acpAutoRefresh: true,
       acpPaused: false,
-      acpSelectedAgentId: localStorage.getItem('acpSelectedAgentId') || '',
+      acpSelectedAgentId: persistedUiState.acpSelectedAgentId || localStorage.getItem('acpSelectedAgentId') || '',
       acpOutputs: new Map(),
       acpHumanMessages: new Map(),
       acpPreviewRequested: new Set(),
@@ -916,7 +1249,37 @@
       acpHeaderSignature: '',
       acpMessagesSignature: '',
       subtasksQueue: { ready: [], running: [], blocked: [], counts: { ready: 0, running: 0, blocked: 0 } },
+      operationsLane: 'coordinators',
+      operationsSelection: (() => {
+        const raw = persistedUiState.operationsSelection;
+        if (!raw || typeof raw !== 'object') return { type: 'project', projectId: null, taskId: null, subtaskId: null };
+        return {
+          type: ['project', 'task', 'subtask'].includes(raw.type) ? raw.type : 'project',
+          projectId: Number.isFinite(Number(raw.projectId)) ? Number(raw.projectId) : null,
+          taskId: Number.isFinite(Number(raw.taskId)) ? Number(raw.taskId) : null,
+          subtaskId: Number.isFinite(Number(raw.subtaskId)) ? Number(raw.subtaskId) : null,
+        };
+      })(),
+      operationsExpandedProjects: (persistedUiState.operationsExpandedProjects && typeof persistedUiState.operationsExpandedProjects === 'object')
+        ? persistedUiState.operationsExpandedProjects
+        : {},
+      operationsLogCollapsed: Boolean(persistedUiState.operationsLogCollapsed),
+      projectFilterId: persistedUiState.projectFilterId ? String(persistedUiState.projectFilterId) : '',
+      historyPanelCollapsed: persistedUiState.historyPanelCollapsed !== false,
+      eventLogCollapsed: Boolean(persistedUiState.eventLogCollapsed),
+      staleThresholds: {
+        taskMs: 20 * 60 * 1000,
+        subtaskMs: 15 * 60 * 1000,
+        waitingMs: 2 * 60 * 1000,
+        agentIdleMs: 8 * 60 * 1000,
+      },
+      blockers: [],
     };
+
+    function persistUiState(patch = {}) {
+      const next = { ...readUiState(), ...patch };
+      try { localStorage.setItem(UI_STATE_KEY, JSON.stringify(next)); } catch {}
+    }
 
     const refs = {
       historyAgentsGrid: document.getElementById('historyAgentsGrid'),
@@ -938,23 +1301,31 @@
       tfProjects: document.getElementById('tfProjects'),
       tfErrors: document.getElementById('tfErrors'),
       tfPRs: document.getElementById('tfPRs'),
-      coordinatorsSection: document.getElementById('coordinatorsSection'),
-      workersActiveSection: document.getElementById('workersActiveSection'),
-      workersIdleSection: document.getElementById('workersIdleSection'),
-      coordinatorsGrid: document.getElementById('coordinatorsGrid'),
-      workersActiveGrid: document.getElementById('workersActiveGrid'),
-      workersIdleGrid: document.getElementById('workersIdleGrid'),
-      coordinatorsCount: document.getElementById('coordinatorsCount'),
-      workersActiveCount: document.getElementById('workersActiveCount'),
-      workersIdleCount: document.getElementById('workersIdleCount'),
+      agentGroupedSections: document.getElementById('agentGroupedSections'),
+      agentGroupingMode: document.getElementById('agentGroupingMode'),
       agentStatsBar: document.getElementById('agentStatsBar'),
       agentSearch: document.getElementById('agentSearch'),
       acpHeader: document.getElementById('acpHeader'),
+      acpPanel: document.getElementById('acpPanel'),
+      acpDockAgents: document.getElementById('acpDockAgents'),
       acpMessages: document.getElementById('acpMessages'),
       acpInput: document.getElementById('acpInput'),
       subtaskStatsBar: document.getElementById('subtaskStatsBar'),
       subtaskReadyTable: document.getElementById('subtaskReadyTable'),
       subtaskRunningTable: document.getElementById('subtaskRunningTable'),
+      opsNavList: document.getElementById('opsNavList'),
+      opsMainGrid: document.getElementById('opsMainGrid'),
+      blockerPanel: document.getElementById('blockerPanel'),
+      opsAgentTotal: document.getElementById('opsAgentTotal'),
+      opsTasksCount: document.getElementById('opsTasksCount'),
+      opsProjectsCount: document.getElementById('opsProjectsCount'),
+      opsLaneTitle: document.getElementById('opsLaneTitle'),
+      opsRailAgent: document.getElementById('opsRailAgent'),
+      opsRailBody: document.getElementById('opsRailBody'),
+      opsRailSummary: document.getElementById('opsRailSummary'),
+      opsAcpDock: document.getElementById('opsAcpDock'),
+      opsEventLogList: document.getElementById('opsEventLogList'),
+      opsEventLogPanel: document.getElementById('opsEventLogPanel'),
     };
 
     const AGENT_BUSY = new Set(['processing','turn_active','waiting_llm','agent_starting','processing_inbox']);
@@ -1031,14 +1402,82 @@
       return true;
     }
 
+    function normalizeProjectEntity(project = {}) {
+      const id = Number(project.id ?? project.project_id ?? project.projectId);
+      if (!Number.isFinite(id)) return null;
+      const status = project.status || 'planned';
+      const taskCounts = project.task_counts?.by_status || project.task_counts || {};
+      const totalTasks = project.total_tasks ?? project.task_counts?.total;
+      return {
+        ...project,
+        id,
+        project_id: id,
+        code: project.code || project.project_code || `p${id}`,
+        name: project.name || `Project ${id}`,
+        status,
+        task_counts: taskCounts,
+        total_tasks: Number.isFinite(totalTasks) ? totalTasks : undefined,
+      };
+    }
+
+    function normalizeTaskEntity(task = {}) {
+      const id = Number(task.id ?? task.task_id ?? task.taskId);
+      if (!Number.isFinite(id)) return null;
+      const projectId = Number(task.project_id ?? task.projectId);
+      return {
+        ...task,
+        id,
+        project_id: Number.isFinite(projectId) ? projectId : task.project_id,
+      };
+    }
+
+    function normalizeSubtaskEntity(subtask = {}, parentTaskId = null) {
+      const id = Number(subtask.id ?? subtask.subtask_id ?? subtask.subtaskId);
+      if (!Number.isFinite(id)) return null;
+      const taskId = Number(subtask.task_id ?? subtask.taskId ?? parentTaskId);
+      return {
+        ...subtask,
+        id,
+        task_id: Number.isFinite(taskId) ? taskId : parentTaskId,
+      };
+    }
+
+    function upsertSubtask(subtask, options = {}) {
+      const normalized = normalizeSubtaskEntity(subtask, options.taskId);
+      if (!normalized || normalized.task_id == null) return null;
+      const prev = state.subtasks.get(normalized.id) || {};
+      const merged = { ...prev, ...normalized, _lastSnapshot: Date.now() };
+      state.subtasks.set(normalized.id, merged);
+      const taskId = Number(merged.task_id);
+      if (Number.isFinite(taskId)) {
+        const current = state.taskSubtasks.get(taskId) || [];
+        if (!current.includes(merged.id)) state.taskSubtasks.set(taskId, [...current, merged.id]);
+      }
+      return merged;
+    }
+
+    function syncTaskSubtasks(taskId, subtasks = []) {
+      if (!Number.isFinite(Number(taskId))) return [];
+      const normalized = subtasks
+        .map((sub) => upsertSubtask(sub, { taskId }))
+        .filter(Boolean);
+      state.taskSubtasks.set(Number(taskId), normalized.map((s) => s.id));
+      return normalized;
+    }
+
+    function materializeTaskSubtasks(taskId) {
+      const ids = state.taskSubtasks.get(Number(taskId)) || [];
+      return ids.map((id) => state.subtasks.get(id)).filter(Boolean);
+    }
+
     function setAgents(list = []) {
       const incomingIds = new Set();
       for (const a of list) {
+        if (!a?.agent_id) continue;
         incomingIds.add(a.agent_id);
         const prev = state.agents.get(a.agent_id) || {};
         state.agents.set(a.agent_id, { ...prev, ...a, _lastSnapshot: Date.now() });
       }
-      // Soft-stale cleanup: agents missing from >4 consecutive snapshots (40s) are marked offline
       const now = Date.now();
       for (const [id, a] of state.agents.entries()) {
         if (!incomingIds.has(id) && (now - (a._lastSnapshot || 0)) > 40000) {
@@ -1050,68 +1489,128 @@
       }
       renderAgents();
       renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function removeAgent(agentId) {
       state.agents.delete(agentId);
       if (state.activeTab === 'agents') renderAgents();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function upsertAgent(a) {
       if (!a || !a.agent_id) return;
       const prev = state.agents.get(a.agent_id) || {};
-      state.agents.set(a.agent_id, { ...prev, ...a });
+      state.agents.set(a.agent_id, { ...prev, ...a, _lastSnapshot: Date.now() });
       if (state.activeTab === 'agents') renderAgents();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
 
     function setProjects(list = []) {
-      const incomingIds = new Set();
-      for (const p of list) {
-        incomingIds.add(p.id);
+      for (const raw of list) {
+        const p = normalizeProjectEntity(raw);
+        if (!p) continue;
         const prev = state.projects.get(p.id) || {};
         state.projects.set(p.id, { ...prev, ...p, _lastSnapshot: Date.now() });
       }
       renderProjects();
       populateProjectFilter();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function removeProject(projectId) {
-      state.projects.delete(projectId);
+      state.projects.delete(Number(projectId));
+      state.projectTasks.delete(Number(projectId));
       if (state.activeTab === 'projects') renderProjects();
       populateProjectFilter();
       if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function upsertProject(p) {
-      if (!p || p.id == null) return;
-      const prev = state.projects.get(p.id) || {};
-      state.projects.set(p.id, { ...prev, ...p });
+      const normalized = normalizeProjectEntity(p);
+      if (!normalized) return;
+      const prev = state.projects.get(normalized.id) || {};
+      state.projects.set(normalized.id, { ...prev, ...normalized, _lastSnapshot: Date.now() });
       if (state.activeTab === 'projects') renderProjects();
       populateProjectFilter();
+      if (state.activeTab === 'operations') renderOperations();
     }
 
     function setTasks(list = []) {
-      const incomingIds = new Set();
-      for (const t of list) {
-        incomingIds.add(t.id);
-        const prev = state.tasks.get(t.id) || {};
-        state.tasks.set(t.id, { ...prev, ...t, _lastSnapshot: Date.now() });
+      for (const raw of list) {
+        const task = normalizeTaskEntity(raw);
+        if (!task) continue;
+        const prev = state.tasks.get(task.id) || {};
+        const merged = { ...prev, ...task, _lastSnapshot: Date.now(), _stale: false };
+        state.tasks.set(task.id, merged);
+
+        const projectId = Number(merged.project_id);
+        if (Number.isFinite(projectId)) {
+          const projectTaskIds = state.projectTasks.get(projectId) || [];
+          if (!projectTaskIds.includes(merged.id)) state.projectTasks.set(projectId, [...projectTaskIds, merged.id]);
+        }
+
+        if (Array.isArray(raw.subtasks)) {
+          const normalizedSubtasks = syncTaskSubtasks(task.id, raw.subtasks);
+          merged.subtasks = normalizedSubtasks;
+          state.tasks.set(task.id, merged);
+        } else if (!Array.isArray(merged.subtasks)) {
+          merged.subtasks = materializeTaskSubtasks(task.id);
+          state.tasks.set(task.id, merged);
+        }
       }
       renderTasks();
       if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function removeTask(taskId) {
-      state.tasks.delete(taskId);
+      const id = Number(taskId);
+      const prev = state.tasks.get(id);
+      state.tasks.delete(id);
+      if (prev?.project_id != null) {
+        const projectId = Number(prev.project_id);
+        const ids = state.projectTasks.get(projectId) || [];
+        state.projectTasks.set(projectId, ids.filter((tid) => tid !== id));
+      }
+      const subIds = state.taskSubtasks.get(id) || [];
+      for (const subId of subIds) state.subtasks.delete(subId);
+      state.taskSubtasks.delete(id);
       if (state.activeTab === 'tasks') renderTasks();
       if (state.activeTab === 'projects') renderProjects();
       if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperations();
     }
+
     function upsertTask(t) {
-      if (!t || t.id == null) return;
-      const prev = state.tasks.get(t.id) || {};
-      state.tasks.set(t.id, { ...prev, ...t, _stale: false });
+      const task = normalizeTaskEntity(t);
+      if (!task) return;
+      const prev = state.tasks.get(task.id) || {};
+      const merged = { ...prev, ...task, _stale: false, _lastSnapshot: Date.now() };
+      state.tasks.set(task.id, merged);
+
+      const projectId = Number(merged.project_id);
+      if (Number.isFinite(projectId)) {
+        const ids = state.projectTasks.get(projectId) || [];
+        if (!ids.includes(merged.id)) state.projectTasks.set(projectId, [...ids, merged.id]);
+      }
+
+      if (Array.isArray(task.subtasks)) {
+        merged.subtasks = syncTaskSubtasks(task.id, task.subtasks);
+        state.tasks.set(task.id, merged);
+      } else {
+        merged.subtasks = materializeTaskSubtasks(task.id);
+        state.tasks.set(task.id, merged);
+      }
+
       if (state.activeTab === 'tasks') renderTasks();
       if (state.activeTab === 'projects') renderProjects();
       if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperations();
     }
 
     function addEventLog(kind, message, payload = {}, source = 'system') {
@@ -1130,6 +1629,7 @@
         renderEventLog();
       }
       if (!state.timelinePaused && state.activeTab === 'timeline') renderTimeline();
+      if (state.activeTab === 'operations') renderOperationsEventLog();
     }
 
     const WORKER_BUSY = new Set(['processing','turn_active','waiting_llm','agent_starting','processing_inbox','streaming','thinking','tool_running','waiting_response']);
@@ -1190,11 +1690,12 @@
         ? `<div class="agent-card-preview"><strong>Preview:</strong> ${escapeHtml(preview.slice(0, 160))}${preview.length > 160 ? '…' : ''}</div>`
         : '';
       const activityLabel = a.activity_label || fallbackActivityLabel(a);
+      const depthPrefix = Number(a._hierarchy_depth || 0) > 0 ? `${'↳ '.repeat(Math.min(Number(a._hierarchy_depth || 0), 4))}` : '';
       return `
         <article class="card agent-card ${coordClass} ${selected ? 'selected' : ''}" style="${isDead ? 'opacity:.65;' : ''}" data-action="select-agent-card" data-agent-id="${escapeHtml(a.agent_id)}">
           <div class="card-header">
             <div>
-              <h3 class="card-title">${escapeHtml(getAgentDisplayName(a))} ${isCoordinator ? '<span style="color:var(--orange)">👑</span>' : ''}</h3>
+              <h3 class="card-title">${escapeHtml(depthPrefix)}${escapeHtml(getAgentDisplayName(a))} ${isCoordinator ? '<span style="color:var(--orange)">👑</span>' : ''}</h3>
               <div class="muted">${escapeHtml(a.display_role || a.role || 'agent')} ${isDead ? '<span style="color:var(--red)">● muerto</span>' : ''}${selected ? ' · <span style="color:var(--cyan)">seleccionado</span>' : ''}</div>
             </div>
             ${agentBadge(s)}
@@ -1208,6 +1709,8 @@
             <div class="meta-row"><b>mailbox:</b> ${escapeHtml(a.mailbox_pending ?? a.mailbox_size ?? '--')} bytes</div>
             <div class="meta-row"><b>activity:</b> ${escapeHtml(activityLabel)}</div>
             <div class="meta-row"><b>pending corr:</b> ${escapeHtml(pendingCorr)}</div>
+            <div class="meta-row"><b>parent:</b> ${escapeHtml(a.parent_agent_id || '--')}</div>
+            <div class="meta-row"><b>depth:</b> ${escapeHtml(a._hierarchy_depth ?? 0)}</div>
           </div>
           ${contextHtml}
           ${previewHtml}
@@ -1216,6 +1719,7 @@
             <button class="btn" data-action="ping-agent" data-agent-id="${escapeHtml(a.agent_id)}">Ping</button>
             <button class="btn" data-action="view-log" data-agent-id="${escapeHtml(a.agent_id)}">View Log</button>
             ${!isCoordinator ? `<button class="btn danger" data-action="kill-agent" data-agent-id="${escapeHtml(a.agent_id)}">Kill</button>` : ''}
+            <button class="btn danger" data-action="cleanup-agent" data-agent-id="${escapeHtml(a.agent_id)}">Cleanup</button>
           </div>
         </article>`;
     }
@@ -1226,30 +1730,26 @@
       return hay.includes(q.toLowerCase());
     }
 
-    function persistAgentCategoryState() {
-      localStorage.setItem('agentCategoryCollapsed', JSON.stringify(state.agentCategoryCollapsed));
+    function persistAgentGroupState() {
+      localStorage.setItem('agentGroupCollapsed', JSON.stringify(state.agentGroupCollapsed || {}));
     }
 
-    function setAgentCategoryCollapsed(category, collapsed) {
-      if (!Object.prototype.hasOwnProperty.call(state.agentCategoryCollapsed, category)) return;
-      state.agentCategoryCollapsed[category] = Boolean(collapsed);
-      persistAgentCategoryState();
-      applyAgentCategoryState();
+    function setAgentGroupCollapsed(groupKey, collapsed) {
+      if (!groupKey) return;
+      state.agentGroupCollapsed[groupKey] = Boolean(collapsed);
+      persistAgentGroupState();
+      renderAgents();
     }
 
-    function applyAgentCategoryState() {
-      const mapping = [
-        ['coordinators', refs.coordinatorsSection],
-        ['running', refs.workersActiveSection],
-        ['idle', refs.workersIdleSection],
-      ];
-      for (const [key, section] of mapping) {
-        if (!section) continue;
-        const collapsed = Boolean(state.agentCategoryCollapsed[key]);
-        section.classList.toggle('collapsed', collapsed);
-        const header = section.querySelector('.agent-category-header');
-        if (header) header.setAttribute('aria-expanded', String(!collapsed));
+    function setAgentGroupingMode(mode) {
+      const valid = new Set(['hierarchy', 'role', 'status', 'lifecycle']);
+      state.agentGroupingMode = valid.has(mode) ? mode : 'hierarchy';
+      localStorage.setItem('agentGroupingMode', state.agentGroupingMode);
+      persistUiState({ agentGroupingMode: state.agentGroupingMode });
+      if (refs.agentGroupingMode && refs.agentGroupingMode.value !== state.agentGroupingMode) {
+        refs.agentGroupingMode.value = state.agentGroupingMode;
       }
+      renderAgents();
     }
 
     function renderLaneCards(list = []) {
@@ -1259,46 +1759,172 @@
       return list.map(agentCard).join('');
     }
 
+    function getHierarchyGroups(liveAgents = []) {
+      const byId = new Map(liveAgents.map((a) => [a.agent_id, a]));
+      const parentToChildren = new Map();
+      const orphans = [];
+
+      for (const agent of liveAgents) {
+        const parentId = agent.parent_agent_id;
+        if (!parentId) continue;
+        if (!byId.has(parentId)) {
+          orphans.push(agent);
+          continue;
+        }
+        const arr = parentToChildren.get(parentId) || [];
+        arr.push(agent);
+        parentToChildren.set(parentId, arr);
+      }
+
+      const roots = liveAgents
+        .filter((a) => !a.parent_agent_id || !byId.has(a.parent_agent_id))
+        .filter((a) => !orphans.includes(a))
+        .sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+
+      const visited = new Set();
+      function collectBranch(root) {
+        const ordered = [];
+        const stack = [{ node: root, depth: 0 }];
+        while (stack.length) {
+          const { node, depth } = stack.pop();
+          if (!node || visited.has(node.agent_id)) continue;
+          visited.add(node.agent_id);
+          ordered.push({ ...node, _hierarchy_depth: depth });
+          const kids = (parentToChildren.get(node.agent_id) || []).sort((a,b) => a.agent_id.localeCompare(b.agent_id));
+          for (let i = kids.length - 1; i >= 0; i -= 1) stack.push({ node: kids[i], depth: depth + 1 });
+        }
+        return ordered;
+      }
+
+      const groups = roots.map((root) => {
+        const branch = collectBranch(root);
+        return {
+          key: `hier-root-${root.agent_id}`,
+          title: `🌳 Root ${root.agent_id}`,
+          note: `${branch.length} agents`,
+          agents: branch,
+          tone: 'normal',
+        };
+      });
+
+      if (orphans.length) {
+        groups.unshift({
+          key: 'hier-orphans',
+          title: '🧩 Orphaned agents (missing parent)',
+          note: 'Check parent_agent_id mapping',
+          agents: orphans.sort((a,b) => a.agent_id.localeCompare(b.agent_id)).map((a) => ({ ...a, _hierarchy_depth: 0 })),
+          tone: 'alert',
+        });
+      }
+
+      const blocked = liveAgents.filter((a) => ['blocked', 'error'].includes(agentStatus(a))).sort((a,b) => a.agent_id.localeCompare(b.agent_id));
+      if (blocked.length) {
+        groups.unshift({
+          key: 'hier-blocked',
+          title: '⚠ Blocked / Error',
+          note: 'High attention',
+          agents: blocked.map((a) => ({ ...a, _hierarchy_depth: 0 })),
+          tone: 'alert',
+        });
+      }
+
+      return groups;
+    }
+
+    function getRoleGroups(liveAgents = []) {
+      const byRole = new Map();
+      for (const agent of liveAgents) {
+        const role = agent.role || 'unknown';
+        const arr = byRole.get(role) || [];
+        arr.push(agent);
+        byRole.set(role, arr);
+      }
+      return [...byRole.entries()]
+        .sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([role, agents]) => ({
+          key: `role-${role}`,
+          title: `🧭 Role: ${role}`,
+          note: `${agents.length} agents`,
+          agents: agents.sort((x,y) => x.agent_id.localeCompare(y.agent_id)),
+          tone: role.includes('coordinator') ? 'normal' : 'normal',
+        }));
+    }
+
+    function getStatusGroups(liveAgents = []) {
+      const byStatus = new Map();
+      for (const agent of liveAgents) {
+        const status = agentStatus(agent);
+        const arr = byStatus.get(status) || [];
+        arr.push(agent);
+        byStatus.set(status, arr);
+      }
+      return [...byStatus.entries()]
+        .sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([status, agents]) => ({
+          key: `status-${status}`,
+          title: `📶 Status: ${status}`,
+          note: `${agents.length} agents`,
+          agents: agents.sort((x,y) => x.agent_id.localeCompare(y.agent_id)),
+          tone: (status === 'blocked' || status === 'error') ? 'alert' : 'normal',
+        }));
+    }
+
+    function getLifecycleGroups(liveAgents = []) {
+      const coordinators = liveAgents.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const workers = liveAgents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator');
+      const activeWorkers = workers.filter(a => WORKER_BUSY.has(a.fabric_status) || a.fabric_status === 'error' || a.fabric_status === 'blocked');
+      const idleWorkers = workers.filter(a => !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'error' && a.fabric_status !== 'blocked');
+      return [
+        { key: 'life-coordinators', title: '👑 Coordinators', note: `${coordinators.length} agents`, agents: coordinators, tone: 'normal' },
+        { key: 'life-running', title: '⚡ Running / Hot', note: `${activeWorkers.length} agents`, agents: activeWorkers, tone: 'normal' },
+        { key: 'life-idle', title: '💤 Idle', note: `${idleWorkers.length} agents`, agents: idleWorkers, tone: 'normal' },
+      ];
+    }
+
+    function getGroupedSections(liveAgents = []) {
+      if (state.agentGroupingMode === 'role') return getRoleGroups(liveAgents);
+      if (state.agentGroupingMode === 'status') return getStatusGroups(liveAgents);
+      if (state.agentGroupingMode === 'lifecycle') return getLifecycleGroups(liveAgents);
+      return getHierarchyGroups(liveAgents);
+    }
+
     function renderAgents() {
       ensureAcpSelection();
       const q = state.agentSearchQuery;
       const all = [...state.agents.values()].filter(a => matchesAgentSearch(a, q))
-        .sort((a,b) => {
-          // Boss / coordinators first
-          const aCoord = a.role === 'coordinator' || a.role === 'sub-coordinator' ? 0 : 1;
-          const bCoord = b.role === 'coordinator' || b.role === 'sub-coordinator' ? 0 : 1;
-          if (aCoord !== bCoord) return aCoord - bCoord;
-          return a.agent_id.localeCompare(b.agent_id);
-        });
+        .sort((a,b) => a.agent_id.localeCompare(b.agent_id));
 
-      const coordinators = all.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
-      const workers = all.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator');
-      const activeWorkers = workers.filter(a => WORKER_BUSY.has(a.fabric_status) || a.fabric_status === 'error' || a.fabric_status === 'blocked');
-      const idleWorkers = workers.filter(a => !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'offline' && a.fabric_status !== 'shutting_down' && a.fabric_status !== 'error' && a.fabric_status !== 'blocked');
-      const dead = all.filter(a => a.fabric_status === 'offline' || a.fabric_status === 'shutting_down');
+      const dead = all.filter(a => !a.process_alive || a.fabric_status === 'offline' || a.fabric_status === 'shutting_down');
+      const live = all.filter(a => !dead.includes(a));
+      const coordinators = live.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const processing = live.filter(a => WORKER_BUSY.has(a.fabric_status)).length;
+      const blocked = live.filter(a => ['blocked', 'error'].includes(agentStatus(a))).length;
 
-      // Stats bar
-      const total = all.length;
-      const alive = all.filter(a => a.process_alive).length;
-      const processing = all.filter(a => WORKER_BUSY.has(a.fabric_status)).length;
       refs.agentStatsBar.innerHTML = `
-        <span class="stat">Total: <b>${total}</b></span>
-        <span class="stat">Alive: <b>${alive}</b></span>
+        <span class="stat">Total: <b>${all.length}</b></span>
+        <span class="stat">Live: <b>${live.length}</b></span>
         <span class="stat">Processing: <b>${processing}</b></span>
+        <span class="stat">Blocked/Error: <b>${blocked}</b></span>
         <span class="stat">Coordinators: <b>${coordinators.length}</b></span>
-        <span class="stat">Offline: <b>${dead.length}</b></span>
+        <span class="stat">Offline/History: <b>${dead.length}</b></span>
       `;
 
-      refs.coordinatorsCount.textContent = `(${coordinators.length})`;
-      refs.workersActiveCount.textContent = `(${activeWorkers.length})`;
-      refs.workersIdleCount.textContent = `(${idleWorkers.length})`;
+      const groups = getGroupedSections(live);
+      refs.agentGroupedSections.innerHTML = groups.map((group) => {
+        const collapsed = Boolean(state.agentGroupCollapsed[group.key]);
+        return `<div class="agent-section agent-category-panel ${group.tone === 'alert' ? 'alert' : ''} ${collapsed ? 'collapsed' : ''}" data-group-key="${escapeHtml(group.key)}">
+          <button class="agent-category-header" data-action="toggle-agent-group" data-group-key="${escapeHtml(group.key)}" aria-expanded="${String(!collapsed)}">
+            <span class="agent-category-toggle-icon">▶</span>
+            <span class="agent-category-title">${escapeHtml(group.title)}</span>
+            <span class="agent-group-note">${escapeHtml(group.note || '')}</span>
+            <span class="muted">(${group.agents.length})</span>
+          </button>
+          <div class="agent-category-body">
+            <div class="agent-lane">${renderLaneCards(group.agents)}</div>
+          </div>
+        </div>`;
+      }).join('') || `<div class="agent-section"><div class="agent-category-body"><div class="agent-lane"><article class="card lane-empty-card"><div class="muted">No live agents for this filter.</div></article></div></div></div>`;
 
-      refs.coordinatorsGrid.innerHTML = renderLaneCards(coordinators);
-      refs.workersActiveGrid.innerHTML = renderLaneCards(activeWorkers);
-      refs.workersIdleGrid.innerHTML = renderLaneCards(idleWorkers);
-      applyAgentCategoryState();
-
-      // Offline / History
       refs.historyCount.textContent = `(${dead.length})`;
       if (!dead.length) {
         refs.historyAgentsGrid.innerHTML = `<div class="card" style="opacity:.55;"><div class="muted">Sin agentes en history.</div></div>`;
@@ -1343,6 +1969,20 @@
             <span class="pill">Total: ${escapeHtml(total)}</span>
             ${Object.entries(counts).map(([k,v]) => `<span class="pill">${escapeHtml(k)}: ${escapeHtml(v)}</span>`).join('')}
           </div>
+
+          ${(p.owner_agent_ids || []).length ? `
+          <div style="margin-top:8px;padding:6px;background:rgba(59,130,246,.08);border-left:2px solid var(--blue);border-radius:4px;">
+            <div class="muted" style="font-size:11px;margin-bottom:4px;">Agentes:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${(p.owner_agent_ids || []).map(aid => {
+                const ag = state.agents.get(aid);
+                const alive = ag?.process_alive;
+                const color = alive ? 'var(--green)' : 'var(--red)';
+                return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'alive' : 'offline'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</span>`;
+              }).join('')}
+            </div>
+          </div>
+          ` : ''}
 
           <div class="muted">Progress ${done}/${total} (${pct}%)</div>
           <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
@@ -1448,6 +2088,534 @@
       logBody.scrollTop = logBody.scrollHeight;
     }
 
+    function toEpochMs(value) {
+      if (value == null || value === '') return 0;
+      if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+      const ms = Date.parse(String(value));
+      return Number.isFinite(ms) ? ms : 0;
+    }
+
+    function fmtDuration(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+
+    function collectBlockersAndStaleSignals() {
+      const now = Date.now();
+      const alerts = [];
+      const thresholds = state.staleThresholds;
+
+      for (const agent of state.agents.values()) {
+        const status = agentStatus(agent);
+        const lastSeenMs = toEpochMs(agent.last_seen_at);
+        const sinceSeen = lastSeenMs ? (now - lastSeenMs) : 0;
+        if (status === 'blocked' || status === 'error') {
+          alerts.push({
+            key: `agent:${agent.agent_id}:${status}`,
+            severity: 'high',
+            type: 'agent',
+            label: `${agent.agent_id} ${status}`,
+            detail: `status=${status} last_seen=${agent.last_seen_at || '--'}`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        } else if ((status === 'waiting_response' || status === 'waiting_llm') && sinceSeen > thresholds.waitingMs) {
+          alerts.push({
+            key: `agent:${agent.agent_id}:waiting`,
+            severity: 'medium',
+            type: 'agent',
+            label: `${agent.agent_id} waiting too long`,
+            detail: `waiting for ${fmtDuration(sinceSeen)} (${status})`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        } else if (agent.process_alive && status !== 'offline' && sinceSeen > thresholds.agentIdleMs) {
+          alerts.push({
+            key: `agent:${agent.agent_id}:stale`,
+            severity: 'medium',
+            type: 'agent',
+            label: `${agent.agent_id} stale heartbeat`,
+            detail: `no heartbeat for ${fmtDuration(sinceSeen)}`,
+            action: { type: 'agent', agent_id: agent.agent_id },
+          });
+        }
+      }
+
+      for (const task of state.tasks.values()) {
+        const taskStatus = String(task.status || 'planned');
+        const updatedMs = toEpochMs(task.updated_at || task.modified_at || task.last_transition_at || task.created_at);
+        const age = updatedMs ? now - updatedMs : 0;
+        if (taskStatus === 'blocked') {
+          alerts.push({
+            key: `task:${task.id}:blocked`,
+            severity: 'high',
+            type: 'task',
+            label: `Task #${task.id} blocked`,
+            detail: `${task.title || 'untitled'} · updated ${task.updated_at || '--'}`,
+            action: { type: 'task', task_id: task.id, project_id: task.project_id },
+          });
+        } else if (['in_progress', 'ready_for_validation', 'ready_for_pr', 'pr_open'].includes(taskStatus) && age > thresholds.taskMs) {
+          alerts.push({
+            key: `task:${task.id}:stale-progress`,
+            severity: 'medium',
+            type: 'task',
+            label: `Task #${task.id} stale-progress`,
+            detail: `${task.title || 'untitled'} · no progress for ${fmtDuration(age)}`,
+            action: { type: 'task', task_id: task.id, project_id: task.project_id },
+          });
+        }
+      }
+
+      for (const subtask of state.subtasks.values()) {
+        const subtaskStatus = String(subtask.status || 'pending');
+        const updatedMs = toEpochMs(subtask.updated_at || subtask.modified_at || subtask.last_transition_at || subtask.created_at);
+        const age = updatedMs ? now - updatedMs : 0;
+        const parentTask = state.tasks.get(Number(subtask.task_id));
+        const projectId = parentTask?.project_id;
+        if (subtaskStatus === 'blocked') {
+          alerts.push({
+            key: `subtask:${subtask.id}:blocked`,
+            severity: 'high',
+            type: 'subtask',
+            label: `Subtask #${subtask.id} blocked`,
+            detail: `${subtask.title || subtask.text || 'subtask'} · task #${subtask.task_id || '--'}`,
+            action: { type: 'subtask', subtask_id: subtask.id, task_id: subtask.task_id, project_id: projectId },
+          });
+        } else if (['running', 'in_progress', 'assigned'].includes(subtaskStatus) && age > thresholds.subtaskMs) {
+          alerts.push({
+            key: `subtask:${subtask.id}:stale-progress`,
+            severity: 'medium',
+            type: 'subtask',
+            label: `Subtask #${subtask.id} stale-progress`,
+            detail: `no update for ${fmtDuration(age)} · task #${subtask.task_id || '--'}`,
+            action: { type: 'subtask', subtask_id: subtask.id, task_id: subtask.task_id, project_id: projectId },
+          });
+        }
+      }
+
+      const unique = new Map();
+      for (const alert of alerts) if (!unique.has(alert.key)) unique.set(alert.key, alert);
+      state.blockers = [...unique.values()].sort((a, b) => {
+        if (a.severity === b.severity) return String(a.label).localeCompare(String(b.label));
+        return a.severity === 'high' ? -1 : 1;
+      });
+    }
+
+    function renderBlockerPanel() {
+      if (!refs.blockerPanel) return;
+      collectBlockersAndStaleSignals(); // stale-progress detection logic
+      const alerts = state.blockers;
+      if (!alerts.length) {
+        refs.blockerPanel.classList.add('clear');
+        refs.blockerPanel.innerHTML = `<div><strong>✅ Blockers / stale signals</strong> <span class="muted">none detected</span></div>`;
+        return;
+      }
+      refs.blockerPanel.classList.remove('clear');
+      refs.blockerPanel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+          <strong>⚠ Blocker / stale work panel</strong>
+          <span class="chip">${alerts.length} alerts</span>
+        </div>
+        <ul class="blocker-list">
+          ${alerts.slice(0, 40).map((alert) => `
+            <li class="blocker-item sev-${alert.severity}">
+              <strong>${escapeHtml(alert.label)}</strong>
+              <span class="muted">${escapeHtml(alert.detail || '')}</span>
+              ${alert.action?.type === 'task' ? ` · <a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(alert.action.task_id)}" data-project-id="${escapeHtml(alert.action.project_id || '')}">open task</a>` : ''}
+              ${alert.action?.type === 'subtask' ? ` · <a href="#" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(alert.action.subtask_id)}" data-task-id="${escapeHtml(alert.action.task_id || '')}" data-project-id="${escapeHtml(alert.action.project_id || '')}">open subtask</a>` : ''}
+              ${alert.action?.type === 'agent' ? ` · <a href="#" data-action="select-acp-agent" data-agent-id="${escapeHtml(alert.action.agent_id)}">open agent</a>` : ''}
+            </li>`).join('')}
+        </ul>
+      `;
+    }
+
+    function operationsLaneBuckets() {
+      const agents = [...state.agents.values()];
+      const coordinators = agents.filter(a => a.role === 'coordinator' || a.role === 'sub-coordinator');
+      const running = agents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator' && WORKER_BUSY.has(a.fabric_status));
+      const idle = agents.filter(a => a.role !== 'coordinator' && a.role !== 'sub-coordinator' && !WORKER_BUSY.has(a.fabric_status) && a.fabric_status !== 'offline' && a.fabric_status !== 'shutting_down');
+      const offline = agents.filter(a => a.fabric_status === 'offline' || a.fabric_status === 'shutting_down' || !a.process_alive);
+      return { coordinators, running, idle, offline };
+    }
+
+    function getTaskOwnership(task = {}) {
+      const coordinator = task.coordinator_agent_id || task.coordinator_id || task.coordinator_agent || task.owner_agent_id || '--';
+      const pmOrchestrator = task.orchestrator_agent_id || task.sub_coordinator_agent_id || task.subcoordinator_agent_id || task.sub_coordinator_id || task.orchestrator_id || '--';
+      const runtimeOrchestrator = task?.ownership?.runtime_orchestrator_agent_id || task?.ownership?.runtime_coordinator_agent_id || task.runtime_coordinator_agent_id || '--';
+      const effectiveOrchestrator = task?.ownership?.effective_orchestrator_agent_id || runtimeOrchestrator || pmOrchestrator || '--';
+      const resolution = task?.ownership?.resolution || ((effectiveOrchestrator && effectiveOrchestrator !== pmOrchestrator) ? 'runtime_session' : 'pm');
+      return { coordinator, orchestrator: effectiveOrchestrator || '--', pmOrchestrator, runtimeOrchestrator, resolution };
+    }
+
+    function normalizeAgentIdList(values = []) {
+      return [...new Set((values || []).map((v) => String(v || '').trim()).filter((v) => v && v !== '--' && v.toLowerCase() !== 'null' && v.toLowerCase() !== 'undefined'))];
+    }
+
+    function renderAgentJumpLink(agentId) {
+      const id = String(agentId || '').trim();
+      if (!id || id === '--') return '--';
+      const isKnown = state.agents.has(id);
+      return `<a href="#" class="ops-link" data-action="select-acp-agent" data-agent-id="${escapeHtml(id)}" title="Open ${escapeHtml(id)} in Agent panel">${escapeHtml(id)}${isKnown ? '' : ' (?)'}</a>`;
+    }
+
+    function renderAgentJumpLinks(agentIds = []) {
+      const ids = normalizeAgentIdList(agentIds);
+      if (!ids.length) return '--';
+      return ids.map((id) => renderAgentJumpLink(id)).join(', ');
+    }
+
+    function getSubtaskAssignees(subtask = {}, task = {}) {
+      const fromSubtask = Array.isArray(subtask.assigned_agents)
+        ? subtask.assigned_agents
+        : Array.isArray(subtask.agent_ids)
+          ? subtask.agent_ids
+          : [subtask.worker_agent_id, subtask.assigned_agent_id, subtask.agent_id].filter(Boolean);
+      if (fromSubtask.length) return fromSubtask;
+      if (Array.isArray(task.agent_ids) && task.agent_ids.length) return task.agent_ids;
+      return [];
+    }
+
+    function getTaskSubtasksNormalized(task = {}) {
+      const inline = Array.isArray(task.subtasks) ? task.subtasks : [];
+      if (inline.length) return inline.map(st => normalizeSubtaskEntity(st, task.id)).filter(Boolean);
+      return materializeTaskSubtasks(task.id);
+    }
+
+    function normalizeIdList(raw) {
+      const arr = Array.isArray(raw) ? raw : (raw != null ? [raw] : []);
+      return arr
+        .map((item) => (typeof item === 'object' ? (item.id ?? item.task_id ?? item.taskId) : item))
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id));
+    }
+
+    function getTaskDependencies(task = {}) {
+      return normalizeIdList(
+        task.dependencies
+        ?? task.depends_on
+        ?? task.depends_on_task_ids
+        ?? task.blocked_by
+        ?? task.blocked_by_task_ids
+      );
+    }
+
+    function getTaskDependents(task = {}) {
+      return normalizeIdList(task.blocking ?? task.blocking_task_ids ?? task.unblocks ?? task.dependents);
+    }
+
+    function getTaskInfraMetadata(task = {}) {
+      return {
+        branch: task.branch || task.git_branch || task.base_branch || '--',
+        worktree: task.worktree_path || task.repo_local_path || task.workspace_path || '--',
+        tmuxSession: task.tmux_session || task.session || task.tmux || '--',
+        pr: task.pr_number ? `#${task.pr_number}` : (task.pr_url || '--'),
+      };
+    }
+
+    function getSubtaskAttempts(subtask = {}) {
+      const value = subtask.attempt_count
+        ?? subtask.attempts
+        ?? subtask.retry_count
+        ?? subtask.retries
+        ?? subtask.run_attempts;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function extractLastError(entity = {}) {
+      const raw = entity.last_error ?? entity.error ?? entity.lastError ?? entity.failure_reason;
+      if (!raw) return '';
+      if (typeof raw === 'string') return raw;
+      if (typeof raw === 'object') {
+        return raw.message || raw.error || raw.reason || JSON.stringify(raw);
+      }
+      return String(raw);
+    }
+
+    function getTaskAgentIds(task = {}, subtasks = []) {
+      const fromTask = Array.isArray(task.agent_ids) ? task.agent_ids : [];
+      const fromRuntime = Array.isArray(task.runtime_task_agent_ids)
+        ? task.runtime_task_agent_ids
+        : (Array.isArray(task.runtime_session_agent_ids) ? task.runtime_session_agent_ids : []);
+      const fromSubtasks = subtasks.flatMap((s) => getSubtaskAssignees(s, task));
+      return [...new Set([...fromTask, ...fromRuntime, ...fromSubtasks].filter(Boolean))];
+    }
+
+    function renderAgentQuickActions(agentIds = []) {
+      if (!agentIds.length) return '<span class="muted">No assigned agents.</span>';
+      return agentIds.map((id) => `
+        <button class="btn" data-action="select-acp-agent" data-agent-id="${escapeHtml(id)}">Open ${escapeHtml(id)}</button>
+        <button class="btn" data-action="view-log" data-agent-id="${escapeHtml(id)}">Log ${escapeHtml(id)}</button>
+      `).join('');
+    }
+
+    function renderTaskLinkList(taskIds = [], projectId = null) {
+      if (!taskIds.length) return '--';
+      return taskIds.map((id) => `<a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(id)}" data-project-id="${escapeHtml(projectId ?? '')}">#${escapeHtml(id)}</a>`).join(', ');
+    }
+
+    function ensureOperationsSelection(projects = []) {
+      const sel = state.operationsSelection || {};
+      const validProject = sel.projectId != null && state.projects.has(Number(sel.projectId));
+      if (sel.type === 'project' && validProject) return;
+      if (sel.type === 'task' && sel.taskId != null && state.tasks.has(Number(sel.taskId))) return;
+      if (sel.type === 'subtask' && sel.subtaskId != null && state.subtasks.has(Number(sel.subtaskId))) return;
+
+      const firstProject = projects[0];
+      if (firstProject) {
+        state.operationsSelection = { type: 'project', projectId: firstProject.id, taskId: null, subtaskId: null };
+        if (state.operationsExpandedProjects[firstProject.id] == null) state.operationsExpandedProjects[firstProject.id] = true;
+      } else {
+        state.operationsSelection = { type: 'project', projectId: null, taskId: null, subtaskId: null };
+      }
+      persistUiState({
+        operationsSelection: state.operationsSelection,
+        operationsExpandedProjects: state.operationsExpandedProjects,
+      });
+    }
+
+    function renderOperationsTree(projects = []) {
+      const selected = state.operationsSelection || {};
+      refs.opsNavList.innerHTML = projects.map((project) => {
+        const taskIds = state.projectTasks.get(Number(project.id)) || [];
+        const tasks = taskIds
+          .map((taskId) => state.tasks.get(Number(taskId)))
+          .filter(Boolean)
+          .filter(shouldShowTask)
+          .sort((a,b) => (a.sequence_order ?? 99999) - (b.sequence_order ?? 99999));
+        const expanded = state.operationsExpandedProjects[project.id] !== false;
+        const projectSelected = selected.type === 'project' && Number(selected.projectId) === Number(project.id);
+
+        return `<article class="ops-tree-project">
+          <button class="ops-tree-project-head ${projectSelected ? 'active' : ''}" data-action="select-ops-project" data-project-id="${escapeHtml(project.id)}">
+            <span><strong>${escapeHtml(project.code || `p${project.id}`)}</strong> <span class="muted">${escapeHtml(project.name || '')}</span></span>
+            <span class="muted">${tasks.length} tasks ${expanded ? '▾' : '▸'}</span>
+          </button>
+          ${expanded ? `<div class="ops-tree-body">${tasks.length ? tasks.map((task) => {
+            const ownership = getTaskOwnership(task);
+            const taskSelected = selected.type === 'task' && Number(selected.taskId) === Number(task.id);
+            const subtasks = getTaskSubtasksNormalized(task);
+            return `<div class="ops-tree-task ${taskSelected ? 'active' : ''}">
+              <div class="ops-tree-task-head" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                <span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>
+                ${taskStatusBadge(task.status)}
+              </div>
+              <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}${ownership.resolution === 'runtime_session' ? ' <span class="muted">(runtime)</span>' : ''}</div>
+              <div class="ops-tree-subtasks">
+                ${subtasks.length ? subtasks.map((subtask) => {
+                  const subtaskSelected = selected.type === 'subtask' && Number(selected.subtaskId) === Number(subtask.id);
+                  const assigned = getSubtaskAssignees(subtask, task);
+                  return `<div class="ops-tree-subtask ${subtaskSelected ? 'active' : ''}" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                    <span>#${escapeHtml(subtask.id)} ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</span>
+                    <span class="muted">${escapeHtml(subtask.status || 'pending')} · ${renderAgentJumpLinks(assigned || [])}</span>
+                  </div>`;
+                }).join('') : `<div class="muted">No subtasks</div>${(task.runtime_task_agent_ids || task.runtime_session_agent_ids || []).length ? `<div class="muted">runtime: ${renderAgentJumpLinks(task.runtime_task_agent_ids || task.runtime_session_agent_ids || [])}</div>` : ''}`}
+              </div>
+            </div>`;
+          }).join('') : '<div class="muted">No tasks in project.</div>'}</div>` : ''}
+        </article>`;
+      }).join('') || `<article class="ops-lane-card"><div class="muted">No projects available.</div></article>`;
+    }
+
+    function renderOperationsDetail() {
+      const sel = state.operationsSelection || {};
+      if (sel.type === 'task' && sel.taskId != null) {
+        const task = state.tasks.get(Number(sel.taskId));
+        if (!task) {
+          refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Task not found.</div></article>`;
+          return;
+        }
+        const project = state.projects.get(Number(task.project_id));
+        const ownership = getTaskOwnership(task);
+        const subtasks = getTaskSubtasksNormalized(task);
+        const infra = getTaskInfraMetadata(task);
+        const dependencies = getTaskDependencies(task);
+        const dependents = getTaskDependents(task);
+        const taskAgents = getTaskAgentIds(task, subtasks);
+        const taskError = extractLastError(task);
+        refs.opsLaneTitle.textContent = `🧩 Task #${task.id} detail`;
+        refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+          <article class="ops-task-detail-panel" data-surface="task-detail-panel">
+            <div class="ops-task-detail-header">
+              <div>
+                <strong>${escapeHtml(task.title || `Task #${task.id}`)}</strong>
+                <div class="muted">${escapeHtml(project?.code || `Project ${task.project_id || '--'}`)} · task #${escapeHtml(task.id)}</div>
+              </div>
+              ${taskStatusBadge(task.status)}
+            </div>
+            <div class="ops-detail-kv">
+              <div><b>Coordinator:</b> ${renderAgentJumpLink(ownership.coordinator)}</div>
+              <div><b>Orchestrator/Sub-coordinator:</b> ${renderAgentJumpLink(ownership.orchestrator)}${ownership.resolution === 'runtime_session' ? ` <span class="muted">(runtime override, pm=${escapeHtml(ownership.pmOrchestrator || '--')})</span>` : ''}</div>
+              <div><b>Branch:</b> ${escapeHtml(infra.branch)}</div>
+              <div><b>Worktree:</b> ${escapeHtml(infra.worktree)}</div>
+              <div><b>tmux session:</b> ${escapeHtml(infra.tmuxSession)}</div>
+              <div><b>Runtime session agents:</b> ${renderAgentJumpLinks(task.runtime_session_agent_ids || task.runtime_task_agent_ids || [])}</div>
+              <div><b>PR:</b> ${task.pr_url ? `<a href="${escapeHtml(task.pr_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(infra.pr)}</a>` : escapeHtml(infra.pr)}</div>
+              <div><b>Dependencies:</b> ${renderTaskLinkList(dependencies, task.project_id)}</div>
+              <div><b>Blocking:</b> ${renderTaskLinkList(dependents, task.project_id)}</div>
+            </div>
+            ${taskError ? `<div class="ops-detail-error"><b>Last error:</b> ${escapeHtml(taskError)}</div>` : '<div class="muted">Last error: none</div>'}
+            <div class="ops-detail-actions">
+              <button class="btn" data-action="open-task" data-task-id="${escapeHtml(task.id)}">Open full task modal</button>
+              ${renderAgentQuickActions(taskAgents)}
+            </div>
+          </article>
+
+          <article class="ops-lane-card">
+            <div style="display:flex;justify-content:space-between;gap:8px;"><strong>Subtasks deep detail</strong><span class="muted">${subtasks.length}</span></div>
+            <div class="ops-detail-subtasks" style="margin-top:8px;">
+              ${subtasks.length ? subtasks.map((subtask) => {
+                const assigned = getSubtaskAssignees(subtask, task);
+                const attempts = getSubtaskAttempts(subtask);
+                const subErr = extractLastError(subtask);
+                const deps = normalizeIdList(subtask.dependencies ?? subtask.depends_on ?? subtask.blocked_by);
+                return `<div class="ops-tree-subtask" data-action="select-ops-subtask" data-subtask-id="${escapeHtml(subtask.id)}" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}">
+                  <div><strong>#${escapeHtml(subtask.id)}</strong> ${escapeHtml(subtask.title || subtask.text || 'Subtask')}</div>
+                  <div class="muted">state: ${escapeHtml(subtask.status || 'pending')} · assigned: ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'} · attempts: ${attempts != null ? escapeHtml(attempts) : '--'} · deps: ${deps.length ? deps.map((id) => `#${id}`).join(', ') : '--'}</div>
+                  ${subErr ? `<div class="ops-detail-error" style="margin-top:6px;"><b>last error:</b> ${escapeHtml(subErr)}</div>` : ''}
+                </div>`;
+              }).join('') : '<div class="muted">No subtasks.</div>'}
+            </div>
+          </article>
+        </div>`;
+        return;
+      }
+
+      if (sel.type === 'subtask' && sel.subtaskId != null) {
+        const subtask = state.subtasks.get(Number(sel.subtaskId));
+        if (!subtask) {
+          refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Subtask not found.</div></article>`;
+          return;
+        }
+        const task = state.tasks.get(Number(subtask.task_id));
+        const project = task ? state.projects.get(Number(task.project_id)) : null;
+        const assigned = getSubtaskAssignees(subtask, task || {});
+        const attempts = getSubtaskAttempts(subtask);
+        const deps = normalizeIdList(subtask.dependencies ?? subtask.depends_on ?? subtask.blocked_by);
+        const subErr = extractLastError(subtask);
+        refs.opsLaneTitle.textContent = `🧷 Subtask #${subtask.id} detail`;
+        refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+          <article class="ops-task-detail-panel" data-surface="task-detail-panel">
+            <div class="ops-task-detail-header">
+              <strong>${escapeHtml(subtask.title || subtask.text || `Subtask #${subtask.id}`)}</strong>
+              <span class="badge t-${escapeHtml(subtask.status || 'planned')}">${escapeHtml(subtask.status || 'pending')}</span>
+            </div>
+            <div class="ops-detail-kv">
+              <div><b>Assigned agents:</b> ${(assigned || []).length ? escapeHtml((assigned || []).join(', ')) : '--'}</div>
+              <div><b>Attempts:</b> ${attempts != null ? escapeHtml(attempts) : '--'}</div>
+              <div><b>Dependencies:</b> ${deps.length ? deps.map((id) => `#${escapeHtml(id)}`).join(', ') : '--'}</div>
+              <div><b>Last heartbeat:</b> ${escapeHtml(subtask.updated_at || subtask.modified_at || '--')}</div>
+              <div><b>Task:</b> ${task ? `<a href="#" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(task.project_id)}">#${escapeHtml(task.id)} ${escapeHtml(task.title || '')}</a>` : '--'}</div>
+              <div><b>Project:</b> ${project ? `<a href="#" data-action="select-ops-project" data-project-id="${escapeHtml(project.id)}">${escapeHtml(project.code || `p${project.id}`)}</a>` : '--'}</div>
+            </div>
+            ${subErr ? `<div class="ops-detail-error"><b>Last error:</b> ${escapeHtml(subErr)}</div>` : '<div class="muted">Last error: none</div>'}
+            <div class="ops-detail-actions">${renderAgentQuickActions(assigned)}</div>
+          </article>
+        </div>`;
+        return;
+      }
+
+      const project = state.projects.get(Number(sel.projectId));
+      if (!project) {
+        refs.opsLaneTitle.textContent = '🛰️ Operations detail';
+        refs.opsMainGrid.innerHTML = `<article class="ops-lane-card"><div class="muted">Select a project or task from the left tree.</div></article>`;
+        return;
+      }
+      const taskIds = state.projectTasks.get(Number(project.id)) || [];
+      const tasks = taskIds.map((id) => state.tasks.get(Number(id))).filter(Boolean).filter(shouldShowTask);
+      refs.opsLaneTitle.textContent = `📁 ${project.code || `p${project.id}`} detail`;
+      refs.opsMainGrid.innerHTML = `<div class="ops-detail-stack">
+        <article class="ops-lane-card">
+          <strong>${escapeHtml(project.name || `Project ${project.id}`)}</strong>
+          <div class="muted" style="margin-top:4px;">project #${escapeHtml(project.id)} · status ${escapeHtml(project.status || 'planned')}</div>
+          <div class="chip-row" style="margin-top:8px;"><span class="chip">Tasks: ${tasks.length}</span><span class="chip">Repo: ${escapeHtml(project.repo_local_path || project.repo_url || '--')}</span></div>
+        </article>
+        <article class="ops-lane-card">
+          <strong>Tasks</strong>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            ${tasks.length ? tasks.map((task) => {
+              const ownership = getTaskOwnership(task);
+              const subtasks = getTaskSubtasksNormalized(task);
+              return `<div class="ops-tree-task" data-action="select-ops-task" data-task-id="${escapeHtml(task.id)}" data-project-id="${escapeHtml(project.id)}">
+                <div class="ops-tree-task-head"><span class="ops-tree-task-title">#${escapeHtml(task.id)} ${escapeHtml(task.title || 'Untitled task')}</span>${taskStatusBadge(task.status)}</div>
+                <div class="ops-tree-task-owners">coord: ${renderAgentJumpLink(ownership.coordinator)} · orch/subcoord: ${renderAgentJumpLink(ownership.orchestrator)}${ownership.resolution === 'runtime_session' ? ' <span class="muted">(runtime)</span>' : ''}</div>
+                <div class="muted">subtasks: ${subtasks.length}${(task.runtime_task_agent_ids || task.runtime_session_agent_ids || []).length ? ` · runtime agents: ${escapeHtml((task.runtime_task_agent_ids || task.runtime_session_agent_ids || []).length)}` : ''}</div>
+              </div>`;
+            }).join('') : '<div class="muted">No tasks in current project.</div>'}
+          </div>
+        </article>
+      </div>`;
+    }
+
+
+    function mountAcpPanel(view = 'agents') {
+      const panel = refs.acpPanel;
+      const dock = view === 'operations' ? refs.opsAcpDock : refs.acpDockAgents;
+      if (!panel || !dock || panel.parentElement === dock) return;
+      dock.appendChild(panel);
+    }
+
+    function renderOperationsRail() {
+      if (!refs.opsRailBody || !refs.opsRailAgent || !refs.opsRailSummary || !refs.opsAcpDock) return;
+      mountAcpPanel('operations');
+      const agentId = ensureAcpSelection();
+      const agent = agentId ? state.agents.get(agentId) : null;
+      refs.opsRailAgent.textContent = agent ? agent.agent_id : 'No agent selected';
+
+      if (!agent) {
+        refs.opsRailSummary.innerHTML = `<p class="muted">Select an agent to view recent outputs, send a message, or open mailbox log.</p>`;
+        renderAcpWorkspace('operations');
+        return;
+      }
+
+      const contextHtml = renderAgentContext(agent) || `<span>${escapeHtml(agent.pm_task_title || (typeof agent.current_task === 'object' ? agent.current_task?.title : agent.current_task) || 'No active task context')}</span>`;
+      refs.opsRailSummary.innerHTML = `
+        <strong>${escapeHtml(agent.agent_id)}</strong>
+        <div class="muted">${escapeHtml(agent.role || '--')} · ${escapeHtml(agentStatus(agent))}</div>
+        <div class="muted">${contextHtml}</div>
+        <div class="ops-agent-actions">
+          <button class="btn" data-action="ping-selected-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Ping</button>
+          <button class="btn" data-action="open-selected-agent-log" data-agent-id="${escapeHtml(agent.agent_id)}">Open log/mailbox</button>
+          <button class="btn" data-action="refresh-acp">Refresh</button>
+          <button class="btn danger" data-action="cleanup-agent" data-agent-id="${escapeHtml(agent.agent_id)}">Cleanup agent</button>
+        </div>
+      `;
+      renderAcpWorkspace('operations');
+    }
+
+    function renderOperations() {
+      if (!refs.opsNavList || !refs.opsMainGrid) return;
+      let projects = [...state.projects.values()].sort((a,b) => (a.id - b.id));
+      projects = projects.filter(shouldShowProject);
+      ensureOperationsSelection(projects);
+
+      refs.opsAgentTotal.textContent = `${[...state.agents.values()].length} agents`;
+      refs.opsTasksCount.textContent = `Tasks: ${[...state.tasks.values()].filter(shouldShowTask).length}`;
+      refs.opsProjectsCount.textContent = `Projects: ${projects.length}`;
+
+      renderOperationsTree(projects);
+      renderOperationsDetail();
+      renderBlockerPanel();
+
+      renderOperationsRail();
+      renderOperationsEventLog();
+    }
+
+    function renderOperationsEventLog() {
+      if (!refs.opsEventLogList || !refs.opsEventLogPanel) return;
+      refs.opsEventLogPanel.classList.toggle('collapsed', state.operationsLogCollapsed);
+      refs.opsEventLogList.innerHTML = state.logEvents.slice(-80).map(e => `
+        <li class="event-item">
+          <span class="event-time">${fmtDate(e.ts)}</span>
+          <b>${escapeHtml(e.kind)}</b> — ${escapeHtml(e.message)}
+        </li>
+      `).join('');
+      refs.opsEventLogList.scrollTop = refs.opsEventLogList.scrollHeight;
+    }
+
     // ── Agent Control Panel ──
 
     function ensureAcpSelection() {
@@ -1458,7 +2626,10 @@
         return String(a.agent_id).localeCompare(String(b.agent_id));
       });
       state.acpSelectedAgentId = all[0]?.agent_id || '';
-      if (state.acpSelectedAgentId) localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+      if (state.acpSelectedAgentId) {
+        localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
+      }
       return state.acpSelectedAgentId;
     }
 
@@ -1529,6 +2700,7 @@
         } catch {}
       }));
       if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperationsRail();
     }
 
     async function fetchAcpMessages() {
@@ -1543,9 +2715,11 @@
         const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/outputs?limit=200`);
         if (Array.isArray(data.messages)) setAcpOutputs(agentId, data.messages);
         if (state.activeTab === 'agents') renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
       } catch (err) {
         addEventLog('acp-output-error', `No se pudo cargar outputs de ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
         if (state.activeTab === 'agents') renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
       }
     }
 
@@ -1698,18 +2872,20 @@
       state.acpMessagesSignature = messagesSig;
     }
 
-    function renderAcpWorkspace() {
+    function renderAcpWorkspace(view = (state.activeTab === 'operations' ? 'operations' : 'agents')) {
+      mountAcpPanel(view);
       if (!refs.acpHeader || !refs.acpMessages || !refs.acpInput) return;
       renderAcpPanel();
     }
 
     async function sendAcpMessage(type = 'chat', extra = {}) {
       const agentId = ensureAcpSelection();
-      if (!agentId) return;
+      if (!agentId) return false;
       const text = String(extra.text ?? refs.acpInput.value ?? '').trim();
-      if (!text) return;
+      if (!text) return false;
       state.acpSending = true;
       renderAcpWorkspace();
+      let sent = false;
       try {
         const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/message`, {
           method: 'POST',
@@ -1719,13 +2895,16 @@
         addAcpHumanMessage(agentId, text, { id: data.messageId, type, status: data.note || 'sent' });
         if (!extra.text) refs.acpInput.value = '';
         addEventLog('acp-message', `${type} enviado a ${agentId}`, { agent_id: agentId, ...data }, 'agent');
+        sent = true;
       } catch (err) {
         addAcpHumanMessage(agentId, text, { type, status: `error: ${err.message}` });
         addEventLog('acp-message-error', `No se pudo enviar a ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
       } finally {
         state.acpSending = false;
         renderAcpWorkspace();
+        if (state.activeTab === 'operations') renderOperationsRail();
       }
+      return sent;
     }
 
     function openAcpTaskModal() {
@@ -1765,22 +2944,32 @@
     }
 
     function populateProjectFilter() {
-      const current = refs.projectFilter.value;
+      const current = refs.projectFilter.value || state.projectFilterId || '';
       const opts = ['<option value="">Todos</option>']
         .concat([...state.projects.values()].sort((a,b)=>a.id-b.id).map(p =>
           `<option value="${escapeHtml(p.id)}">${escapeHtml((p.code || `p${p.id}`) + ' - ' + (p.name || ''))}</option>`
         ));
       refs.projectFilter.innerHTML = opts.join('');
-      if ([...refs.projectFilter.options].some(o => o.value === current)) refs.projectFilter.value = current;
+      if ([...refs.projectFilter.options].some(o => o.value === current)) {
+        refs.projectFilter.value = current;
+        state.projectFilterId = current;
+      } else {
+        refs.projectFilter.value = '';
+        state.projectFilterId = '';
+      }
+      persistUiState({ projectFilterId: state.projectFilterId });
     }
 
     function switchTab(tab) {
-      state.activeTab = tab;
+      const validTabs = new Set(['operations','agents','projects','tasks','timeline','subtasks']);
+      state.activeTab = validTabs.has(tab) ? tab : 'operations';
+      persistUiState({ activeTab: state.activeTab });
       document.querySelectorAll('.tab-btn').forEach((b) => {
         b.classList.toggle('active', b.dataset.tab === tab);
       });
       document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${tab}`));
 
+      if (tab === 'operations') renderOperations();
       if (tab === 'timeline') renderTimeline();
       if (tab === 'projects') renderProjects();
       if (tab === 'tasks') renderTasks();
@@ -1862,25 +3051,37 @@
       return await res.json();
     }
 
-    async function fetchDashboardSnapshot() {
+    async function fetchProjectsFallback() {
       try {
-        const filterParam = state.showOnlyActive ? '?filter=active' : '';
-        const snap = await fetchJson(`${API}/api/dashboard/snapshot${filterParam}`);
-        if (Array.isArray(snap.agents)) setAgents(snap.agents);
-        // Protect against backend stubs returning empty arrays when we already have data
-        if (Array.isArray(snap.projects) && (snap.projects.length > 0 || state.projects.size === 0)) {
-          setProjects(snap.projects);
+        const filter = state.showOnlyActive ? '?filter=active' : '';
+        const payload = await fetchJson(`${API}/api/projects/summary${filter}`);
+        const projects = Array.isArray(payload) ? payload : payload?.projects;
+        if (Array.isArray(projects)) {
+          setProjects(projects);
+          return;
         }
-        if (Array.isArray(snap.active_tasks) && (snap.active_tasks.length > 0 || state.tasks.size === 0)) {
-          setTasks(snap.active_tasks);
-        }
-        refs.lastSync.textContent = `Sync: ${nowStr()}`;
-      } catch (err) {
-        addEventLog('snapshot-error', `No se pudo sync dashboard: ${err.message}`, {}, 'system');
-      }
+      } catch {}
+
+      // Backward fallback for older monitor servers
+      try {
+        const filter = state.showOnlyActive ? '?filter=active' : '';
+        const payload = await fetchJson(`${API}/api/projects${filter}`);
+        const projects = Array.isArray(payload) ? payload : payload?.projects;
+        if (Array.isArray(projects)) setProjects(projects);
+      } catch {}
     }
 
     async function fetchAgentsFallback() {
+      try {
+        const payload = await fetchJson(`${API}/api/agents?hierarchy=true`);
+        const agents = Array.isArray(payload) ? payload : payload?.hierarchy || payload?.agents;
+        if (Array.isArray(agents) && agents.length) {
+          setAgents(agents);
+          return;
+        }
+      } catch {}
+
+      // Backward fallback for older monitor servers
       try {
         const payload = await fetchJson(`${API}/api/agents`);
         const agents = Array.isArray(payload) ? payload : payload?.agents;
@@ -1888,18 +3089,45 @@
       } catch {}
     }
 
+    async function refreshCoreData() {
+      try {
+        await Promise.all([fetchAgentsFallback(), fetchProjectsFallback(), fetchTasks()]);
+        refs.lastSync.textContent = `Sync: ${nowStr()}`;
+      } catch (err) {
+        addEventLog('refresh-error', `No se pudo sync dashboard core data: ${err.message}`, {}, 'system');
+      }
+    }
+
     async function fetchTasks(projectId = '') {
       try {
-        const filterParam = state.showOnlyActive ? '&filter=active' : (projectId ? '' : '?filter=');
-        const q = projectId ? `?project_id=${encodeURIComponent(projectId)}` : (filterParam ? filterParam : '');
+        const params = new URLSearchParams();
+        if (projectId) params.set('project_id', String(projectId));
+        if (state.showOnlyActive) params.set('filter', 'active');
+        params.set('include_subtasks', 'true');
+        const q = params.toString() ? `?${params.toString()}` : '';
         const tasks = await fetchJson(`${API}/api/tasks${q}`);
         if (Array.isArray(tasks)) {
-          // Merge instead of clear-all to prevent kanban flicker
+          for (const t of tasks) upsertTask(t);
+          if (state.activeTab === 'tasks') renderTasks();
+          return;
+        }
+      } catch (err) {
+        addEventLog('tasks-error', `No se pudo cargar tasks: ${err.message}`, {}, 'project');
+      }
+
+      // Backward fallback (without subtasks include)
+      try {
+        const params = new URLSearchParams();
+        if (projectId) params.set('project_id', String(projectId));
+        if (state.showOnlyActive) params.set('filter', 'active');
+        const q = params.toString() ? `?${params.toString()}` : '';
+        const tasks = await fetchJson(`${API}/api/tasks${q}`);
+        if (Array.isArray(tasks)) {
           for (const t of tasks) upsertTask(t);
           if (state.activeTab === 'tasks') renderTasks();
         }
       } catch (err) {
-        addEventLog('tasks-error', `No se pudo cargar tasks: ${err.message}`, {}, 'project');
+        addEventLog('tasks-fallback-error', `No se pudo cargar tasks fallback: ${err.message}`, {}, 'project');
       }
     }
 
@@ -2013,6 +3241,8 @@
           <div><b>base_branch:</b> ${escapeHtml(t.base_branch || '--')}</div>
           <div><b>worktree:</b> ${escapeHtml(t.worktree_path || '--')}</div>
           <div><b>tmux_session:</b> ${escapeHtml(t.tmux_session || '--')}</div>
+          <div><b>coordinator:</b> ${renderAgentJumpLink(getTaskOwnership(t).coordinator)}</div>
+          <div><b>orchestrator/subcoord:</b> ${renderAgentJumpLink(getTaskOwnership(t).orchestrator)}${getTaskOwnership(t).resolution === 'runtime_session' ? ` <span class="muted">(runtime override, pm=${escapeHtml(getTaskOwnership(t).pmOrchestrator || '--')})</span>` : ''}</div>
           <div><b>asana:</b> ${t.asana_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.asana_url)}">link</a>` : '--'}</div>
           <div><b>PR:</b> ${t.pr_url ? `<a target="_blank" rel="noopener" href="${escapeHtml(t.pr_url)}">link</a> ${taskStatusBadge(t.pr_status || (t.status?.startsWith('pr_') ? t.status : ''))}` : '--'}</div>
         </div>
@@ -2030,7 +3260,7 @@
                   const ag = state.agents.get(aid);
                   const alive = ag?.process_alive;
                   const color = alive ? 'var(--green)' : 'var(--red)';
-                  return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</span>`;
+                  return `<a href="#" class="chip" data-action="select-acp-agent" data-agent-id="${escapeHtml(aid)}" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}</a>`;
                 }).join('') || '<span class="muted" style="font-size:11px;">Sin agentes</span>'}
               </div>
             </div>
@@ -2049,7 +3279,7 @@
             const ag = state.agents.get(aid);
             const alive = ag?.process_alive;
             const color = alive ? 'var(--green)' : 'var(--red)';
-            return `<span class="chip" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}${ag?.role ? ` · ${escapeHtml(ag.role)}` : ''}</span>`;
+            return `<a href="#" class="chip" data-action="select-acp-agent" data-agent-id="${escapeHtml(aid)}" title="${escapeHtml(ag?.role || 'agent')} ${alive ? 'vivo' : 'muerto'}"><span style="color:${color}">●</span> ${escapeHtml(aid)}${ag?.role ? ` · ${escapeHtml(ag.role)}` : ''}</a>`;
           }).join('') || '<span class="muted">Sin agentes asignados</span>'}
         </div>
 
@@ -2059,6 +3289,82 @@
         </ul>
         `
       );
+    }
+
+    function mergeTaskPatchFromEvent(payload = {}) {
+      const id = Number(payload.task_id ?? payload.id ?? payload.taskId);
+      if (!Number.isFinite(id)) return null;
+      const prev = state.tasks.get(id) || { id };
+      const patch = {
+        ...prev,
+        id,
+        task_id: id,
+        status: payload.status ?? prev.status,
+        title: payload.title ?? prev.title,
+        project_id: Number(payload.project_id ?? prev.project_id),
+        updated_at: payload.updated_at ?? payload.ts ?? new Date().toISOString(),
+      };
+      return patch;
+    }
+
+    function applyRealtimeEntityEvent(eventName, payload) {
+      const lower = String(eventName || '').toLowerCase();
+
+      if (lower.includes('project')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const projectId = Number(payload?.project_id ?? payload?.id);
+          if (Number.isFinite(projectId)) removeProject(projectId);
+        } else {
+          const project = payload?.project || payload;
+          if (project) upsertProject(project);
+        }
+      }
+
+      if (lower.includes('task')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const taskId = Number(payload?.task_id ?? payload?.id ?? payload?.task?.id);
+          if (Number.isFinite(taskId)) removeTask(taskId);
+        } else {
+          const task = payload?.task || payload?.task_row || payload?.data?.task || payload;
+          if (task && (task.id != null || task.task_id != null)) upsertTask(task);
+          else {
+            const patch = mergeTaskPatchFromEvent(payload);
+            if (patch) upsertTask(patch);
+          }
+        }
+      }
+
+      if (lower.includes('subtask')) {
+        if (lower.includes('deleted') || lower.includes('removed')) {
+          const subtaskId = Number(payload?.subtask_id ?? payload?.id);
+          if (Number.isFinite(subtaskId)) state.subtasks.delete(subtaskId);
+        } else {
+          const subtask = payload?.subtask || payload?.data?.subtask || payload;
+          const mergedSubtask = upsertSubtask(subtask, { taskId: Number(payload?.task_id ?? subtask?.task_id) });
+          if (mergedSubtask?.task_id != null) {
+            const taskId = Number(mergedSubtask.task_id);
+            const task = state.tasks.get(taskId);
+            if (task) {
+              task.subtasks = materializeTaskSubtasks(taskId);
+              task._lastSnapshot = Date.now();
+              state.tasks.set(taskId, task);
+            }
+          }
+        }
+      }
+
+      if (lower.includes('agent-associated') || lower.includes('agent-assigned')) {
+        const taskId = Number(payload?.task_id);
+        if (Number.isFinite(taskId) && state.tasks.has(taskId)) {
+          const t = { ...state.tasks.get(taskId) };
+          t.agent_ids = Array.from(new Set([...(t.agent_ids || []), ...(payload.agent_ids || []), payload.agent_id].filter(Boolean)));
+          upsertTask(t);
+        }
+      }
+
+      if (state.activeTab === 'tasks') renderTasks();
+      if (state.activeTab === 'projects') renderProjects();
+      if (state.activeTab === 'operations') renderOperations();
     }
 
     function setupSSE() {
@@ -2081,7 +3387,9 @@
 
       es.addEventListener('snapshot', (ev) => {
         const payload = parse(ev.data);
-        const agents = Array.isArray(payload) ? payload : payload?.agents;
+        const agents = Array.isArray(payload)
+          ? payload
+          : payload?.hierarchy || payload?.agents;
         if (Array.isArray(agents)) setAgents(agents);
         addEventLog('snapshot', 'Snapshot de agentes', payload, 'agent');
       });
@@ -2114,24 +3422,19 @@
         }
       });
 
-      ['task-update','task-created','subtask-update'].forEach(name => {
+      const realtimeEntityEvents = [
+        'task-created','task-create','task-updated','task-update','task-status-changed','task-deleted','task-removed',
+        'subtask-created','subtask-update','subtask-updated','subtask-status-changed','subtask-deleted','subtask-removed',
+        'project-created','project-updated','project-status-changed','project-deleted','project-removed',
+        'agent-associated','agent-assigned'
+      ];
+      for (const name of realtimeEntityEvents) {
         es.addEventListener(name, (ev) => {
           const payload = parse(ev.data);
-          const task = payload?.task || payload;
-          upsertTask(task);
-          addEventLog(name, `Task ${task?.id || payload?.id || ''} ${name}`, payload, 'project');
+          applyRealtimeEntityEvent(name, payload); // incremental SSE updates
+          addEventLog(name, `Realtime ${name}`, payload, 'project');
         });
-      });
-
-      es.addEventListener('agent-associated', (ev) => {
-        const payload = parse(ev.data);
-        if (payload?.task_id && state.tasks.has(Number(payload.task_id))) {
-          const t = { ...state.tasks.get(Number(payload.task_id)) };
-          t.agent_ids = Array.from(new Set([...(t.agent_ids || []), ...(payload.agent_ids || []), payload.agent_id].filter(Boolean)));
-          upsertTask(t);
-        }
-        addEventLog('agent-associated', `Asociación task/agente`, payload, 'project');
-      });
+      }
 
       es.addEventListener('log-event', (ev) => {
         const payload = parse(ev.data);
@@ -2190,7 +3493,11 @@
       const action = el.dataset.action;
       if (action === 'close-modal') closeModal();
 
-      if (action === 'toggle-log-collapse') refs.logPanel.classList.toggle('collapsed');
+      if (action === 'toggle-log-collapse') {
+        refs.logPanel.classList.toggle('collapsed');
+        state.eventLogCollapsed = refs.logPanel.classList.contains('collapsed');
+        persistUiState({ eventLogCollapsed: state.eventLogCollapsed });
+      }
       if (action === 'toggle-log-pause') {
         state.logPaused = !state.logPaused;
         el.textContent = state.logPaused ? 'Reanudar' : 'Pausar';
@@ -2207,6 +3514,73 @@
 
       if (action === 'refresh-tasks') fetchTasks(refs.projectFilter.value);
 
+      if (action === 'select-ops-lane') {
+        state.operationsLane = el.dataset.lane || 'coordinators';
+        renderOperations();
+        return;
+      }
+
+      if (action === 'select-ops-project') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        if (Number.isFinite(projectId)) {
+          state.operationsExpandedProjects[projectId] = state.operationsExpandedProjects[projectId] === false;
+          state.operationsSelection = { type: 'project', projectId, taskId: null, subtaskId: null };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'select-ops-task') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        const taskId = Number(el.dataset.taskId);
+        if (Number.isFinite(taskId)) {
+          if (Number.isFinite(projectId)) state.operationsExpandedProjects[projectId] = true;
+          state.operationsSelection = { type: 'task', projectId: Number.isFinite(projectId) ? projectId : null, taskId, subtaskId: null };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'select-ops-subtask') {
+        e.preventDefault();
+        const projectId = Number(el.dataset.projectId);
+        const taskId = Number(el.dataset.taskId);
+        const subtaskId = Number(el.dataset.subtaskId);
+        if (Number.isFinite(subtaskId)) {
+          if (Number.isFinite(projectId)) state.operationsExpandedProjects[projectId] = true;
+          state.operationsSelection = {
+            type: 'subtask',
+            projectId: Number.isFinite(projectId) ? projectId : null,
+            taskId: Number.isFinite(taskId) ? taskId : null,
+            subtaskId,
+          };
+          persistUiState({
+            operationsSelection: state.operationsSelection,
+            operationsExpandedProjects: state.operationsExpandedProjects,
+          });
+          renderOperations();
+        }
+        return;
+      }
+
+      if (action === 'toggle-ops-log') {
+        state.operationsLogCollapsed = !state.operationsLogCollapsed;
+        persistUiState({ operationsLogCollapsed: state.operationsLogCollapsed });
+        renderOperationsEventLog();
+        el.textContent = state.operationsLogCollapsed ? 'Expand' : 'Collapse';
+        return;
+      }
+
       if (action === 'refresh-acp') {
         state.acpPaused = false;
         fetchAcpMessages();
@@ -2215,7 +3589,9 @@
       if (action === 'select-agent-card' || action === 'select-acp-agent') {
         state.acpSelectedAgentId = el.dataset.agentId || '';
         localStorage.setItem('acpSelectedAgentId', state.acpSelectedAgentId);
+        persistUiState({ acpSelectedAgentId: state.acpSelectedAgentId });
         renderAgents();
+        if (state.activeTab === 'operations') renderOperationsRail();
         fetchAcpMessages();
         return;
       }
@@ -2235,8 +3611,9 @@
         return;
       }
 
-      if (action === 'ping-agent') {
-        const id = el.dataset.agentId;
+      if (action === 'ping-agent' || action === 'ping-selected-agent') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (!id) return;
         try {
           await fetchJson(`${API}/api/healthcheck/${encodeURIComponent(id)}`, { method: 'POST' });
           addEventLog('healthcheck', `Ping enviado a ${id}`, { agent_id: id }, 'agent');
@@ -2256,16 +3633,32 @@
         }
       }
 
-      if (action === 'toggle-agent-category') {
-        const category = el.dataset.category;
-        if (category) {
-          const next = !state.agentCategoryCollapsed[category];
-          setAgentCategoryCollapsed(category, next);
+      if (action === 'cleanup-agent') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (!id) return;
+        if (!confirm(`Cleanup agent ${id}? This will kill its pane/process if present, remove mailbox/state/output artifacts, and delete it from the runtime registry immediately.`)) return;
+        try {
+          const data = await fetchJson(`${API}/api/cleanup-agent/${encodeURIComponent(id)}`, { method: 'POST' });
+          removeAgent(id);
+          addEventLog('cleanup-agent', `Cleanup completed for ${id}`, data, 'agent');
+        } catch (err) {
+          addEventLog('cleanup-agent-error', `Cleanup failed for ${id}: ${err.message}`, { agent_id: id }, 'agent');
+        }
+        return;
+      }
+
+      if (action === 'toggle-agent-group') {
+        const groupKey = el.dataset.groupKey;
+        if (groupKey) {
+          const next = !state.agentGroupCollapsed[groupKey];
+          setAgentGroupCollapsed(groupKey, next);
         }
       }
 
       if (action === 'toggle-history') {
         refs.historyAgentsPanel.classList.toggle('collapsed');
+        state.historyPanelCollapsed = refs.historyAgentsPanel.classList.contains('collapsed');
+        persistUiState({ historyPanelCollapsed: state.historyPanelCollapsed });
       }
 
       if (action === 'purge-offline') {
@@ -2283,7 +3676,10 @@
         }
       }
 
-      if (action === 'view-log') openAgentLog(el.dataset.agentId);
+      if (action === 'view-log' || action === 'open-selected-agent-log') {
+        const id = el.dataset.agentId || state.acpSelectedAgentId;
+        if (id) openAgentLog(id);
+      }
       if (action === 'view-project') openProjectDetail(el.dataset.projectId);
       if (action === 'open-task') {
         e.preventDefault();
@@ -2293,11 +3689,19 @@
       }
     });
 
-    refs.projectFilter.addEventListener('change', () => renderTasks());
+    refs.projectFilter.addEventListener('change', () => {
+      state.projectFilterId = refs.projectFilter.value || '';
+      persistUiState({ projectFilterId: state.projectFilterId });
+      renderTasks();
+    });
     refs.agentSearch.addEventListener('input', (e) => {
       state.agentSearchQuery = e.target.value.trim();
       renderAgents();
     });
+    if (refs.agentGroupingMode) {
+      refs.agentGroupingMode.value = state.agentGroupingMode;
+      refs.agentGroupingMode.addEventListener('change', (e) => setAgentGroupingMode(e.target.value));
+    }
     if (refs.acpInput) {
       refs.acpInput.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -2316,19 +3720,22 @@
 
     (async function init() {
       updateFilterToggleUI();
-      await fetchDashboardSnapshot();
-      await fetchTasks();
+      refs.historyAgentsPanel.classList.toggle('collapsed', state.historyPanelCollapsed);
+      refs.logPanel.classList.toggle('collapsed', state.eventLogCollapsed);
+
+      await refreshCoreData();
       setupSSE();
 
-      setInterval(fetchDashboardSnapshot, 10000); // full sync fallback
-      setInterval(fetchAgentsFallback, 10000);    // agents polling fallback
+      setInterval(refreshCoreData, 10000);        // API fallback without dashboard snapshot endpoint
       setInterval(() => { if (state.activeTab === 'tasks') fetchTasks(refs.projectFilter.value); }, 15000);
 
+      renderOperations();
       renderAgents();
       renderProjects();
       renderTasks();
       renderTimeline();
       renderEventLog();
+      switchTab(state.activeTab);
       fetchAcpMessages();
       fetchSubtasksQueue();
 

@@ -1,7 +1,7 @@
 ---
 name: chat
 description: Cooperative chat agent for the multi-agent system. Handles simple questions, human-facing translation, and lightweight coordination support.
-model: fern/glm-5
+model: fern/minimax-m2.7
 tools: read,bash
 thinking: low
 mode: rpc

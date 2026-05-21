@@ -44,10 +44,35 @@ If this variable is missing, Fabric commands and tools will not be available.
 ## Main directories
 
 - `src/core/` — launcher, extension, monitor, runtime helpers
-- `src/pm/` — project/task management over SQLite
+- `src/pm/` — project/task management over SQLite (includes task analysis system)
 - `src/agents/` — standalone-agent namespace
-- `skills/` — agent role instructions
+- `skills/` — agent role instructions (loaded via frontmatter YAML in SKILL.md files)
 - `dashboard/` — browser UI
+
+## Skill System
+
+Skills define agent behavior via frontmatter in `skills/{role}/SKILL.md`:
+
+```yaml
+---
+name: dev
+description: Developer worker specialized in implementation...
+model: fern/gpt-5.3-codex
+tools: read,write,edit,bash,grep,find
+thinking: medium
+mode: rpc
+---
+```
+
+Fields:
+- `name`: Role identifier (matches directory name)
+- `description`: Human-readable purpose
+- `model`: LLM model to use
+- `tools`: Comma-separated allowed tools
+- `thinking`: low|medium|high (token budget)
+- `mode`: interactive|rpc
+
+The launcher auto-loads the skill based on `--role`. Extension exposes `fabric_launch_agent` which internally uses `node --import tsx-loader` (not `npx tsx`) to avoid hanging issues.
 
 ## Default runtime layout
 
@@ -66,7 +91,7 @@ If this variable is missing, Fabric commands and tools will not be available.
 
 1. Coordinator should usually run in `interactive` mode.
 2. Workers should usually run in `rpc` mode.
-3. Launch agents through `src/core/launcher.ts` instead of hand-building `pi` commands.
+3. Launch agents through `src/core/launcher.ts` or `fabric_launch_agent` instead of hand-building `pi` commands.
 4. Keep mailbox traffic compact and machine-oriented.
 5. Do not replace SIGUSR1 wakeups with polling.
 6. Prefer environment variables over hardcoded paths.
@@ -99,6 +124,24 @@ tmux ls
 ```
 
 If the extension schema changed, use `/reload` inside `pi`.
+
+## Task Analysis System
+
+Task analyses capture chronological context per task in `projects.sqlite`:
+
+- `pm_write_analysis` — Persist analysis with auto-versioning (v1, v2, ...)
+- `pm_read_analyses` — Retrieve by task_id, keywords, or analysis_type
+- `pm_inject_task_context` — Load agent_note into current chat
+
+Schema:
+- `agent_note` (required): Dense plain text with errors, configs, decisions, paths
+- `human_note` (optional): Short summary for humans (~500 chars)
+- `analysis_type`: debugging|root_cause|planning|review|validation|evaluation|retro|decision|general
+- `confidence`: 0-100
+- `keywords`: JSON array of searchable terms
+- `invalidated`: Boolean flag (replaces old `is_active` column)
+
+Only non-invalidated analyses are returned by default. When a new analysis is written, previous ones are automatically invalidated.
 
 ## Source of truth
 

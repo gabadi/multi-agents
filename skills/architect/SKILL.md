@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Software architect focused on API design, module boundaries, refactors, patterns, anti-patterns, and architecture decision records.
-model: fern/claude-opus-4-6
+model: fern/minimax-m2.7
 tools: read,write,edit,bash
 thinking: high
 mode: rpc

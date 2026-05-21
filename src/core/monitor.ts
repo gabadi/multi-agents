@@ -7,7 +7,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync, readdirSync, watch, existsSync, statSync, openSync, closeSync, readSync, fstatSync, appendFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
-import { basename, extname, resolve, dirname } from "node:path";
+import { basename, extname, resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -1158,6 +1158,10 @@ function safeAgentFileName(agentId: string) {
   return agentId.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+function shellQuote(value: string): string {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -1671,14 +1675,73 @@ function serveDashboard(res: ServerResponse) {
   }
 }
 
-function serveApiAgents(res: ServerResponse) {
+function buildAgentHierarchy(allAgents: MonitoredAgent[]) {
+  const byId = new Map(allAgents.map((a) => [a.agent_id, a]));
+  const children = new Map<string, string[]>();
+
+  const coordinators = allAgents.filter((a) => a.role === "coordinator" || a.role === "secretary");
+  const subCoordinators = allAgents.filter((a) => a.role === "sub-coordinator");
+
+  for (const sub of subCoordinators) {
+    const parent = coordinators.find((c) => c.session === sub.session)
+      ?? coordinators.find((c) => c.current_task && c.current_task === sub.current_task)
+      ?? null;
+    if (parent) {
+      const current = children.get(parent.agent_id) ?? [];
+      current.push(sub.agent_id);
+      children.set(parent.agent_id, current);
+    }
+  }
+
+  for (const worker of allAgents.filter((a) => a.role !== "coordinator" && a.role !== "secretary" && a.role !== "sub-coordinator")) {
+    const parent = subCoordinators.find((s) => s.current_task && s.current_task === worker.current_task)
+      ?? subCoordinators.find((s) => s.session === worker.session)
+      ?? coordinators.find((c) => c.session === worker.session)
+      ?? null;
+    if (parent) {
+      const current = children.get(parent.agent_id) ?? [];
+      current.push(worker.agent_id);
+      children.set(parent.agent_id, current);
+    }
+  }
+
+  const parentByChild = new Map<string, string>();
+  for (const [parentId, childIds] of children.entries()) {
+    for (const childId of childIds) {
+      parentByChild.set(childId, parentId);
+    }
+  }
+
+  const roots = allAgents
+    .filter((a) => !parentByChild.has(a.agent_id))
+    .map((a) => a.agent_id);
+
+  const hierarchy = allAgents.map((a) => ({
+    ...a,
+    parent_agent_id: parentByChild.get(a.agent_id) ?? null,
+    children_agent_ids: children.get(a.agent_id) ?? [],
+    children_count: (children.get(a.agent_id) ?? []).length,
+  }));
+
+  return {
+    roots,
+    hierarchy,
+    by_id: Object.fromEntries(Array.from(byId.entries())),
+  };
+}
+
+function serveApiAgents(res: ServerResponse, url: URL) {
   // Memory-first: use in-memory Map. DB syncs in background.
   const all = Array.from(agents.values()).map((a) => ({ ...a }));
+  const includeHierarchy = url.searchParams.get("hierarchy") === "true";
+  const payload = includeHierarchy
+    ? buildAgentHierarchy(all)
+    : all;
   res.writeHead(200, {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
   });
-  res.end(JSON.stringify(all, null, 2));
+  res.end(JSON.stringify(payload, null, 2));
 }
 
 function serveApiAgentOutputs(res: ServerResponse, agentId: string, url: URL) {
@@ -2093,6 +2156,104 @@ function serveApiChat(res: ServerResponse, url: URL) {
   }
 }
 
+function killAgentProcessResources(agent: MonitoredAgent): { paneKilled: boolean; pidKilled: boolean; sessionKilled: boolean; sessionName: string | null } {
+  const paneId = String(agent.pane_id || "").trim();
+  const sessionName = (paneId ? getTmuxSessionForPane(paneId) : null) || String(agent.session || "").trim() || null;
+  const paneCountBefore = sessionName
+    ? (() => {
+        try {
+          return Number(execSync(`tmux list-panes -t ${shellQuote(sessionName)} 2>/dev/null | wc -l`, { encoding: "utf8", timeout: 2000 }).trim() || "0");
+        } catch {
+          return 0;
+        }
+      })()
+    : 0;
+
+  let paneKilled = false;
+  if (paneId) {
+    try {
+      execSync(`tmux kill-pane -t ${shellQuote(paneId)}`, { encoding: "utf8", timeout: 3000 });
+      paneKilled = true;
+    } catch {
+      // ignore; fall back to pid kill
+    }
+  }
+
+  let pidKilled = false;
+  if (agent.pid && checkPid(agent.pid)) {
+    try {
+      process.kill(agent.pid, "SIGTERM");
+      pidKilled = true;
+    } catch {
+      // ignore
+    }
+  }
+
+  let sessionKilled = false;
+  if (sessionName && paneCountBefore <= 1) {
+    try {
+      execSync(`tmux kill-session -t ${shellQuote(sessionName)}`, { encoding: "utf8", timeout: 3000 });
+      sessionKilled = true;
+    } catch {
+      // ignore; session may already be gone
+    }
+  }
+
+  return { paneKilled, pidKilled, sessionKilled, sessionName };
+}
+
+function removeAgentRuntimeArtifacts(agentId: string): string[] {
+  const removed: string[] = [];
+  const candidates = [
+    join(MAILBOX_DIR, `${agentId}.jsonl`),
+    join(PID_DIR, `${agentId}.pid`),
+    join(STATE_DIR, `${agentId}.json`),
+    outputFileForAgent(agentId),
+  ];
+
+  for (const path of candidates) {
+    try {
+      if (existsSync(path)) {
+        unlinkSync(path);
+        removed.push(path);
+      }
+    } catch {
+      // ignore individual cleanup failures
+    }
+  }
+
+  try {
+    const paneLogDir = join(FABRIC_DIR, "pane-logs");
+    if (existsSync(paneLogDir)) {
+      for (const entry of readdirSync(paneLogDir)) {
+        if (!entry.startsWith(`${safeAgentFileName(agentId)}-`)) continue;
+        const path = join(paneLogDir, entry);
+        try {
+          unlinkSync(path);
+          removed.push(path);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  outputOffsets.delete(agentId);
+  return removed;
+}
+
+function cleanupAgentRegistration(agentId: string): void {
+  const db = getDb();
+  try {
+    db.prepare("DELETE FROM agents WHERE agent_id = ?").run(agentId);
+  } finally {
+    db.close();
+  }
+  agents.delete(agentId);
+}
+
 function serveApiKill(res: ServerResponse, agentId: string) {
   const agent = agents.get(agentId);
   if (!agent) {
@@ -2108,7 +2269,7 @@ function serveApiKill(res: ServerResponse, agentId: string) {
     return;
   }
   try {
-    execSync(`tmux kill-pane -t ${agent.pane_id}`, { encoding: "utf8" });
+    execSync(`tmux kill-pane -t ${shellQuote(agent.pane_id)}`, { encoding: "utf8" });
     agent.fabric_status = "shutting_down";
     broadcastSSE("agent-update", agentFromMemory(agentId));
     monitorLog("info", "kill.success", { agent_id: agentId, pane_id: agent.pane_id });
@@ -2118,6 +2279,47 @@ function serveApiKill(res: ServerResponse, agentId: string) {
     monitorLog("error", "kill.failed", { agent_id: agentId, pane_id: agent.pane_id, error: String(err) });
     res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ error: String(err) }));
+  }
+}
+
+function serveApiCleanupAgent(res: ServerResponse, agentId: string) {
+  const agent = agentExists(agentId);
+  if (!agent) {
+    sendJson(res, 404, { ok: false, error: "Agent not found" });
+    monitorLog("warn", "cleanup.not_found", { agent_id: agentId });
+    return;
+  }
+
+  try {
+    const processResult = killAgentProcessResources(agent);
+    const removedFiles = removeAgentRuntimeArtifacts(agentId);
+    cleanupAgentRegistration(agentId);
+
+    broadcastSSE("agent-removed", { agent_id: agentId, reason: "cleanup_requested" });
+    monitorLog("info", "cleanup.success", {
+      agent_id: agentId,
+      pane_id: agent.pane_id,
+      pid: agent.pid,
+      session: processResult.sessionName,
+      pane_killed: processResult.paneKilled,
+      pid_killed: processResult.pidKilled,
+      session_killed: processResult.sessionKilled,
+      removed_files: removedFiles,
+    });
+
+    sendJson(res, 200, {
+      ok: true,
+      action: "cleanup-agent",
+      agent_id: agentId,
+      pane_killed: processResult.paneKilled,
+      pid_killed: processResult.pidKilled,
+      session_killed: processResult.sessionKilled,
+      session: processResult.sessionName,
+      removed_files: removedFiles,
+    });
+  } catch (err) {
+    monitorLog("error", "cleanup.failed", { agent_id: agentId, error: String(err) });
+    sendJson(res, 500, { ok: false, error: String(err) });
   }
 }
 
@@ -2220,7 +2422,7 @@ function getActiveCoordinators(): ActiveCoordinatorRoutingSnapshot[] {
 
 function getActiveProjects(): ActiveProjectRoutingSnapshot[] {
   return getProjects({ status: "active" }).map((p) => ({
-    project_id: p.project_id,
+    project_id: p.id,
     name: p.name,
     status: p.status,
     short_title: String(p.name || "").slice(0, 80),
@@ -2236,7 +2438,187 @@ function getProjectById(id: number): ProjectTree | null {
   }
 }
 
-function getTasks(filters?: { project_id?: number; status?: string; agent_id?: string; active_only?: boolean }): (TaskRow & { agent_ids: string[] })[] {
+type SubtaskAssignmentMeta = {
+  id: number;
+  subtask_id: number;
+  agent_id: string;
+  assignment_type: string;
+  status: string;
+  assigned_at: string;
+  completed_at: string | null;
+  result_summary: string | null;
+};
+
+type SubtaskDependencyMeta = {
+  id: number;
+  subtask_id: number;
+  depends_on_subtask_id: number;
+  dependency_type: string;
+  created_at: string;
+};
+
+type EnrichedSubtaskRow = SubtaskRow & {
+  agent_ids: string[];
+  assignments: SubtaskAssignmentMeta[];
+  dependencies: SubtaskDependencyMeta[];
+  dependents: SubtaskDependencyMeta[];
+  depends_on: number[];
+};
+
+type EnrichedTaskRow = TaskRow & {
+  agent_ids: string[];
+  runtime_session_agent_ids: string[];
+  runtime_task_agent_ids: string[];
+  runtime_worker_agent_ids: string[];
+  ownership: {
+    coordinator_agent_id: string | null;
+    orchestrator_agent_id: string | null;
+    runtime_coordinator_agent_id: string | null;
+    runtime_orchestrator_agent_id: string | null;
+    effective_orchestrator_agent_id: string | null;
+    resolution: "pm" | "runtime_session";
+  };
+};
+
+function placeholders(count: number): string {
+  return Array.from({ length: count }, () => "?").join(",");
+}
+
+function getSubtaskAssignmentsByIds(db: DatabaseSync, subtaskIds: number[]): Map<number, SubtaskAssignmentMeta[]> {
+  const map = new Map<number, SubtaskAssignmentMeta[]>();
+  if (subtaskIds.length === 0) return map;
+
+  const stmt = db.prepare(`
+    SELECT id, subtask_id, agent_id, assignment_type, status, assigned_at, completed_at, result_summary
+    FROM subtask_assignments
+    WHERE subtask_id IN (${placeholders(subtaskIds.length)})
+    ORDER BY assigned_at DESC
+  `);
+  const rows = stmt.all(...subtaskIds) as SubtaskAssignmentMeta[];
+  for (const row of rows) {
+    const current = map.get(row.subtask_id) ?? [];
+    current.push(row);
+    map.set(row.subtask_id, current);
+  }
+  return map;
+}
+
+function getSubtaskDependenciesByIds(db: DatabaseSync, subtaskIds: number[]): {
+  dependenciesBySubtaskId: Map<number, SubtaskDependencyMeta[]>;
+  dependentsBySubtaskId: Map<number, SubtaskDependencyMeta[]>;
+} {
+  const dependenciesBySubtaskId = new Map<number, SubtaskDependencyMeta[]>();
+  const dependentsBySubtaskId = new Map<number, SubtaskDependencyMeta[]>();
+  if (subtaskIds.length === 0) return { dependenciesBySubtaskId, dependentsBySubtaskId };
+
+  const inClause = placeholders(subtaskIds.length);
+  const dependencies = db.prepare(`
+    SELECT id, subtask_id, depends_on_subtask_id, dependency_type, created_at
+    FROM subtask_dependencies
+    WHERE subtask_id IN (${inClause})
+    ORDER BY created_at ASC
+  `).all(...subtaskIds) as SubtaskDependencyMeta[];
+
+  const dependents = db.prepare(`
+    SELECT id, subtask_id, depends_on_subtask_id, dependency_type, created_at
+    FROM subtask_dependencies
+    WHERE depends_on_subtask_id IN (${inClause})
+    ORDER BY created_at ASC
+  `).all(...subtaskIds) as SubtaskDependencyMeta[];
+
+  for (const row of dependencies) {
+    const current = dependenciesBySubtaskId.get(row.subtask_id) ?? [];
+    current.push(row);
+    dependenciesBySubtaskId.set(row.subtask_id, current);
+  }
+
+  for (const row of dependents) {
+    const current = dependentsBySubtaskId.get(row.depends_on_subtask_id) ?? [];
+    current.push(row);
+    dependentsBySubtaskId.set(row.depends_on_subtask_id, current);
+  }
+
+  return { dependenciesBySubtaskId, dependentsBySubtaskId };
+}
+
+function enrichSubtasks(db: DatabaseSync, subtasks: SubtaskRow[]): EnrichedSubtaskRow[] {
+  if (subtasks.length === 0) return [];
+  const subtaskIds = subtasks.map((s) => s.id);
+  const assignmentsBySubtaskId = getSubtaskAssignmentsByIds(db, subtaskIds);
+  const { dependenciesBySubtaskId, dependentsBySubtaskId } = getSubtaskDependenciesByIds(db, subtaskIds);
+
+  return subtasks.map((s) => {
+    const dependencies = dependenciesBySubtaskId.get(s.id) ?? [];
+    const dependents = dependentsBySubtaskId.get(s.id) ?? [];
+    const assignments = assignmentsBySubtaskId.get(s.id) ?? [];
+    return {
+      ...s,
+      agent_ids: [s.worker_agent_id, s.qa_agent_id, ...assignments.map((a) => a.agent_id)].filter(Boolean) as string[],
+      assignments,
+      dependencies,
+      dependents,
+      depends_on: dependencies.map((d) => d.depends_on_subtask_id),
+    };
+  });
+}
+
+function getTaskRuntimeSessionAgents(task: TaskRow): MonitoredAgent[] {
+  const session = String(task.tmux_session ?? "").trim();
+  if (!session) return [];
+  return Array.from(agents.values()).filter((agent) => {
+    if (!agent || !agent.process_alive) return false;
+    if (agent.fabric_status === "offline" || agent.fabric_status === "shutting_down") return false;
+    return String(agent.session ?? "").trim() === session;
+  });
+}
+
+function enrichTask(task: TaskRow): EnrichedTaskRow {
+  const pmCoordinator = task.coordinator_agent_id;
+  const pmOrchestrator = task.orchestrator_agent_id;
+  const runtimeSessionAgents = getTaskRuntimeSessionAgents(task);
+  const runtimeSessionAgentIds = runtimeSessionAgents.map((a) => a.agent_id);
+
+  const runtimeCoordinator = runtimeSessionAgents.find((a) => a.role === "sub-coordinator")
+    ?? runtimeSessionAgents.find((a) => a.role === "coordinator")
+    ?? runtimeSessionAgents.find((a) => a.role === "secretary")
+    ?? null;
+
+  const runtimeWorkers = runtimeSessionAgents
+    .filter((a) => a.role !== "coordinator" && a.role !== "sub-coordinator" && a.role !== "secretary")
+    .map((a) => a.agent_id);
+
+  const pmOrchestratorRuntime = pmOrchestrator ? agents.get(pmOrchestrator) : undefined;
+  const pmOrchestratorAliveInSession = !!pmOrchestratorRuntime
+    && pmOrchestratorRuntime.process_alive
+    && String(pmOrchestratorRuntime.session ?? "").trim() === String(task.tmux_session ?? "").trim();
+
+  const effectiveOrchestrator = pmOrchestratorAliveInSession
+    ? pmOrchestrator
+    : (runtimeCoordinator?.agent_id ?? pmOrchestrator);
+
+  const runtimeTaskAgents = Array.from(new Set([
+    ...runtimeWorkers,
+    ...(runtimeCoordinator ? [runtimeCoordinator.agent_id] : []),
+  ]));
+
+  return {
+    ...task,
+    agent_ids: [pmCoordinator, pmOrchestrator].filter(Boolean) as string[],
+    runtime_session_agent_ids: Array.from(new Set(runtimeSessionAgentIds)),
+    runtime_task_agent_ids: runtimeTaskAgents,
+    runtime_worker_agent_ids: Array.from(new Set(runtimeWorkers)),
+    ownership: {
+      coordinator_agent_id: pmCoordinator,
+      orchestrator_agent_id: pmOrchestrator,
+      runtime_coordinator_agent_id: runtimeCoordinator?.agent_id ?? null,
+      runtime_orchestrator_agent_id: runtimeCoordinator?.agent_id ?? null,
+      effective_orchestrator_agent_id: effectiveOrchestrator ?? null,
+      resolution: pmOrchestratorAliveInSession || !runtimeCoordinator ? "pm" : "runtime_session",
+    },
+  };
+}
+
+function getTasks(filters?: { project_id?: number; status?: string; agent_id?: string; active_only?: boolean; include_subtasks?: boolean }): Array<EnrichedTaskRow & { subtasks?: EnrichedSubtaskRow[] }> {
   const db = getPmDb();
   const dbFilters: { project_id?: number; status?: string; agent_id?: string } = {};
   if (filters?.project_id != null) dbFilters.project_id = filters.project_id;
@@ -2246,33 +2628,33 @@ function getTasks(filters?: { project_id?: number; status?: string; agent_id?: s
   if (filters?.active_only) {
     rows = rows.filter((r) => r.status !== "completed" && r.status !== "failed");
   }
-  return rows.map((t) => ({
-    ...t,
-    agent_ids: [t.coordinator_agent_id, t.orchestrator_agent_id].filter(Boolean) as string[],
+
+  const enrichedTasks = rows.map((t) => enrichTask(t));
+  if (!filters?.include_subtasks) {
+    return enrichedTasks;
+  }
+
+  return enrichedTasks.map((task) => ({
+    ...task,
+    subtasks: enrichSubtasks(db, getSubtasksByTaskIdFromDb(db, task.id)),
   }));
 }
 
-function getTaskById(id: number): (TaskRow & { agent_ids: string[]; subtasks: (SubtaskRow & { agent_ids: string[] })[] }) | null {
+function getTaskById(id: number): (EnrichedTaskRow & { subtasks: EnrichedSubtaskRow[] }) | null {
   try {
     const db = getPmDb();
     const task = getTaskByIdFromDb(db, id);
     if (!task) return null;
-    const subtasks = getSubtasksByTaskIdFromDb(db, id).map((s) => ({
-      ...s,
-      agent_ids: [s.worker_agent_id, s.qa_agent_id].filter(Boolean) as string[],
-    }));
-    return { ...task, agent_ids: [task.coordinator_agent_id, task.orchestrator_agent_id].filter(Boolean) as string[], subtasks };
+    const subtasks = enrichSubtasks(db, getSubtasksByTaskIdFromDb(db, id));
+    return { ...enrichTask(task), subtasks };
   } catch {
     return null;
   }
 }
 
-function getSubtasksByTaskId(taskId: number): (SubtaskRow & { agent_ids: string[] })[] {
+function getSubtasksByTaskId(taskId: number): EnrichedSubtaskRow[] {
   const db = getPmDb();
-  return getSubtasksByTaskIdFromDb(db, taskId).map((s) => ({
-    ...s,
-    agent_ids: [s.worker_agent_id, s.qa_agent_id].filter(Boolean) as string[],
-  }));
+  return enrichSubtasks(db, getSubtasksByTaskIdFromDb(db, taskId));
 }
 
 function initProjectsDb(): void {
@@ -2411,6 +2793,51 @@ function serveApiProjects(res: ServerResponse, url: URL) {
   }
 }
 
+function serveApiProjectsSummary(res: ServerResponse, url: URL) {
+  try {
+    const filter = url.searchParams.get("filter");
+    const filters = filter === "active" ? { status: "active" } : undefined;
+    const projects = getProjects(filters);
+
+    const summary = projects.map((project) => {
+      const projectId = project.id;
+      const tasks = getTasks({ project_id: projectId, include_subtasks: true });
+      const statuses = tasks.reduce<Record<string, number>>((acc, task) => {
+        acc[task.status] = (acc[task.status] ?? 0) + 1;
+        return acc;
+      }, {});
+      const ownership = Array.from(new Set(tasks.flatMap((task) => task.agent_ids).filter(Boolean)));
+      const runtimeOwnership = Array.from(new Set(tasks.flatMap((task) => task.runtime_task_agent_ids ?? []).filter(Boolean)));
+      const effectiveOwnership = Array.from(new Set([...ownership, ...runtimeOwnership].filter(Boolean)));
+      const subtasks = tasks.flatMap((task) => task.subtasks ?? []);
+      return {
+        project_id: projectId,
+        name: project.name,
+        status: project.status,
+        repo_url: project.repo_url,
+        task_counts: {
+          total: tasks.length,
+          by_status: statuses,
+          completed: statuses.completed ?? 0,
+        },
+        subtask_counts: subtasks.reduce<Record<string, number>>((acc, subtask) => {
+          acc[subtask.status] = (acc[subtask.status] ?? 0) + 1;
+          return acc;
+        }, {}),
+        owner_agent_ids: ownership,
+        runtime_owner_agent_ids: runtimeOwnership,
+        effective_owner_agent_ids: effectiveOwnership,
+      };
+    });
+
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ projects: summary }, null, 2));
+  } catch (err) {
+    res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ error: String(err) }));
+  }
+}
+
 function serveApiProjectById(res: ServerResponse, id: string, url: URL) {
   try {
     const includeAgents = url.searchParams.get("include_agents") === "true";
@@ -2420,18 +2847,21 @@ function serveApiProjectById(res: ServerResponse, id: string, url: URL) {
       res.end(JSON.stringify({ error: "Project not found" }));
       return;
     }
-    const tasks = tree.tasks.map((t) => ({
-      ...t,
-      agent_ids: [t.coordinator_agent_id, t.orchestrator_agent_id].filter(Boolean),
-      subtasks: t.subtasks.map((s) => ({
-        ...s,
-        agent_ids: [s.worker_agent_id, s.qa_agent_id].filter(Boolean),
-      })),
+
+    const db = getPmDb();
+    const tasks = tree.tasks.map((task) => ({
+      ...enrichTask(task),
+      subtasks: enrichSubtasks(db, task.subtasks),
     }));
+
     let payload: Record<string, unknown> = { project: tree.project, tasks };
     if (includeAgents) {
-      const agentIds = getAgentIdsForProject(getPmDb(), Number(id));
-      payload = { ...payload, agents: resolveAgentStates(agentIds) };
+      const agentIds = new Set<string>(getAgentIdsForProject(getPmDb(), Number(id)));
+      for (const task of tasks) {
+        for (const aid of task.runtime_session_agent_ids ?? []) if (aid) agentIds.add(aid);
+        for (const aid of task.runtime_task_agent_ids ?? []) if (aid) agentIds.add(aid);
+      }
+      payload = { ...payload, include_agents: true, agents: resolveAgentStates(Array.from(agentIds)) };
     }
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(payload, null, 2));
@@ -2443,11 +2873,12 @@ function serveApiProjectById(res: ServerResponse, id: string, url: URL) {
 
 function serveApiTasks(res: ServerResponse, url: URL) {
   try {
-    const filters: { project_id?: number; status?: string; agent_id?: string; active_only?: boolean } = {};
+    const filters: { project_id?: number; status?: string; agent_id?: string; active_only?: boolean; include_subtasks?: boolean } = {};
     if (url.searchParams.has("project_id")) filters.project_id = Number(url.searchParams.get("project_id"));
     if (url.searchParams.has("status")) filters.status = url.searchParams.get("status")!;
     if (url.searchParams.has("agent_id")) filters.agent_id = url.searchParams.get("agent_id")!;
     if (url.searchParams.get("filter") === "active") filters.active_only = true;
+    if (url.searchParams.get("include_subtasks") === "true") filters.include_subtasks = true;
     const data = getTasks(filters);
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(data, null, 2));
@@ -2460,31 +2891,32 @@ function serveApiTasks(res: ServerResponse, url: URL) {
 function serveApiTaskById(res: ServerResponse, id: string, url: URL) {
   try {
     const includeAgents = url.searchParams.get("include_agents") === "true";
-    const db = getPmDb();
-    const taskRow = getTaskByIdFromDb(db, Number(id));
-    if (!taskRow) {
+    const taskData = getTaskById(Number(id));
+    if (!taskData) {
       res.writeHead(404, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify({ error: "Task not found" }));
       return;
     }
+
+    const db = getPmDb();
     const details = getTaskWithDetails(db, Number(id));
-    const subtasks = details.subtasks.map((s) => ({
-      ...s,
-      agent_ids: [s.worker_agent_id, s.qa_agent_id].filter(Boolean),
-    }));
     let payload: Record<string, unknown> = {
-      ...taskRow,
-      agent_ids: [taskRow.coordinator_agent_id, taskRow.orchestrator_agent_id].filter(Boolean),
-      subtasks,
+      ...taskData,
       blocked_by: details.blocked_by,
       events: details.events,
     };
     if (includeAgents) {
-      const agentIds = new Set<string>(payload.agent_ids as string[]);
-      for (const s of subtasks) {
+      const agentIds = new Set<string>(taskData.agent_ids as string[]);
+      for (const aid of taskData.runtime_session_agent_ids ?? []) if (aid) agentIds.add(aid);
+      for (const aid of taskData.runtime_task_agent_ids ?? []) if (aid) agentIds.add(aid);
+      for (const s of taskData.subtasks) {
         for (const aid of s.agent_ids) if (aid) agentIds.add(aid);
       }
-      payload.agents = resolveAgentStates(Array.from(agentIds));
+      payload = {
+        ...payload,
+        include_agents: true,
+        agents: resolveAgentStates(Array.from(agentIds)),
+      };
     }
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(payload, null, 2));
@@ -2837,7 +3269,11 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   } else if (agentMessageMatch && req.method === "POST") {
     await serveApiAgentMessage(res, req, decodeURIComponent(agentMessageMatch[1]));
   } else if (url.pathname === "/api/agents" && req.method === "GET") {
-    serveApiAgents(res);
+    serveApiAgents(res, url);
+  } else if (url.pathname === "/api/hierarchy" && req.method === "GET") {
+    const hierarchyUrl = new URL(url.toString());
+    hierarchyUrl.searchParams.set("hierarchy", "true");
+    serveApiAgents(res, hierarchyUrl);
   } else if (url.pathname === "/api/metrics" && req.method === "GET") {
     serveApiMetrics(res);
   } else if (url.pathname === "/api/events" && req.method === "GET") {
@@ -2848,11 +3284,16 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   } else if (url.pathname.startsWith("/api/kill/") && req.method === "POST") {
     const agentId = url.pathname.slice("/api/kill/".length);
     serveApiKill(res, agentId);
+  } else if (url.pathname.startsWith("/api/cleanup-agent/") && req.method === "POST") {
+    const agentId = url.pathname.slice("/api/cleanup-agent/".length);
+    serveApiCleanupAgent(res, agentId);
   } else if (url.pathname.startsWith("/api/healthcheck/") && req.method === "POST") {
     const agentId = url.pathname.slice("/api/healthcheck/".length);
     serveApiHealthcheck(res, agentId);
   } else if (url.pathname === "/api/projects" && req.method === "GET") {
     serveApiProjects(res, url);
+  } else if (url.pathname === "/api/projects/summary" && req.method === "GET") {
+    serveApiProjectsSummary(res, url);
   } else if (url.pathname.startsWith("/api/projects/") && req.method === "GET") {
     const id = url.pathname.split("/")[3];
     serveApiProjectById(res, id, url);
@@ -2868,6 +3309,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   } else if (url.pathname === "/api/subtasks/assignments" && req.method === "GET") {
     serveApiSubtasksAssignments(res);
   } else if (url.pathname === "/api/dashboard/snapshot" && req.method === "GET") {
+    // Legacy fallback only. V2 UI should prefer /api/agents?hierarchy=true + /api/projects/summary + /api/tasks?include_subtasks=true.
     serveApiDashboardSnapshot(res, url);
   } else if (url.pathname === "/api/events/projects" && req.method === "GET") {
     serveApiProjectsEvents(res, url);

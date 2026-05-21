@@ -4,6 +4,7 @@
  */
 
 import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -204,29 +205,75 @@ export function readConfig(): TelegramConfig {
   };
 }
 
+function shouldFallbackToCurl(err: unknown): boolean {
+  const error = err as { message?: string; cause?: { code?: string; message?: string } } | undefined;
+  const message = String(error?.message || "");
+  const causeCode = String(error?.cause?.code || "");
+  const causeMessage = String(error?.cause?.message || "");
+  return (
+    causeCode === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    causeCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    causeCode === "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" ||
+    /self-signed certificate/i.test(causeMessage) ||
+    (/fetch failed/i.test(message) && /certificate|tls|ssl/i.test(causeMessage))
+  );
+}
+
+function telegramCurlRequest(url: string, body?: Record<string, unknown>): string {
+  const args = ["-sS", "-L"];
+  if (body) {
+    args.push("-X", "POST", "-H", "Content-Type: application/json", "--data-binary", JSON.stringify(body));
+  }
+  args.push(url);
+  return execFileSync("curl", args, {
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024,
+  });
+}
+
+async function telegramApiRequest(url: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<any> {
+  try {
+    const res = await fetch(url, body ? {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    } : { signal });
+    const raw = await res.text();
+
+    let data: any = null;
+    if (raw.trim()) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        data = null;
+      }
+    }
+
+    if (!res.ok) {
+      const details = data?.description || raw.trim() || "Telegram API error";
+      throw new Error(`HTTP ${res.status}: ${details}`);
+    }
+    if (!data) throw new Error("Telegram API returned empty or non-JSON body");
+    return data;
+  } catch (err) {
+    if (!shouldFallbackToCurl(err)) throw err;
+    const raw = telegramCurlRequest(url, body);
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error(`Telegram curl fallback returned non-JSON body: ${raw}`);
+    }
+  }
+}
+
 export async function tgGetUpdates(
   token: string,
   offset: number,
   signal: AbortSignal
 ): Promise<any[]> {
   const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&limit=10`;
-  const res = await fetch(url, { signal });
-  const raw = await res.text();
-
-  let data: any = null;
-  if (raw.trim()) {
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      data = null;
-    }
-  }
-
-  if (!res.ok) {
-    const details = data?.description || raw.trim() || "Telegram API error";
-    throw new Error(`HTTP ${res.status}: ${details}`);
-  }
-  if (!data) throw new Error("Telegram API returned empty or non-JSON body");
+  const data = await telegramApiRequest(url, undefined, signal);
   if (!data.ok) throw new Error(data.description || "Telegram API error");
   return data.result || [];
 }
@@ -252,22 +299,7 @@ export async function tgSendMessage(
     ...(options?.replyTo ? { reply_to_message_id: options.replyTo } : {}),
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const raw = await res.text();
-  if (!res.ok) throw new Error(`[telegram-bridge] sendMessage failed: HTTP ${res.status} ${raw}`);
-
-  let data: any;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(`[telegram-bridge] sendMessage returned non-JSON body: ${raw}`);
-  }
-
+  const data = await telegramApiRequest(url, body);
   if (data?.ok === false) {
     throw new Error(data.description || "Telegram API error");
   }
@@ -306,7 +338,7 @@ function loadChatSessions(): void {
         userId: typeof session.userId === "number" ? session.userId : undefined,
         activeCoordinatorId: typeof session.activeCoordinatorId === "string" && session.activeCoordinatorId.trim()
           ? session.activeCoordinatorId.trim()
-          : "boss",
+          : "secretary",
         mode: session.mode === "buffer" || session.mode === "approval" ? session.mode : "streaming",
         lastActivity: typeof session.lastActivity === "string" && session.lastActivity
           ? session.lastActivity
@@ -341,7 +373,7 @@ export function getChatSession(chatId: number, userId?: number): ChatSession {
     chatSessions.set(chatId, {
       chatId,
       userId,
-      activeCoordinatorId: "boss",
+      activeCoordinatorId: "secretary",
       mode: "streaming",
       lastActivity: new Date().toISOString(),
     });
@@ -367,14 +399,14 @@ export function resetTelegramBridgeStateForTests(): void {
 }
 
 export function getActiveCoordinators(agents: AgentInfo[]): ActiveCoordinatorSnapshot[] {
-  const allowedRoles = new Set(["coordinator", "sub-coordinator"]);
+  const allowedRoles = new Set(["secretary", "coordinator", "sub-coordinator"]);
   const blockedStatuses = new Set(["offline", "shutting_down"]);
 
   return agents
     .filter((a) => allowedRoles.has(a.role) && !blockedStatuses.has(String(a.fabric_status || "")))
     .map((a) => ({
       agent_id: a.agent_id,
-      role: a.role as "coordinator" | "sub-coordinator",
+      role: a.role as "secretary" | "coordinator" | "sub-coordinator",
       fabric_status: a.fabric_status,
       current_task: a.current_task ?? null,
     }));
@@ -386,7 +418,7 @@ function validateCoordinatorRoute(
 ): { ok: true; coordinator: ActiveCoordinatorSnapshot } | { ok: false; reason: string } {
   const coordinator = activeCoordinators.find((c) => c.agent_id === targetCoordinatorId);
   if (!coordinator) return { ok: false, reason: "target_not_active_coordinator" };
-  if (coordinator.role !== "coordinator" && coordinator.role !== "sub-coordinator") {
+  if (coordinator.role !== "secretary" && coordinator.role !== "coordinator" && coordinator.role !== "sub-coordinator") {
     return { ok: false, reason: "target_not_coordinator_role" };
   }
   return { ok: true, coordinator };
@@ -526,15 +558,14 @@ export function forwardToCoordinator(
   }
 }
 
-function routeQueueStatusText(target: ActiveCoordinatorSnapshot): string {
+function isCoordinatorBusy(target: ActiveCoordinatorSnapshot): boolean {
   const busyStatuses = new Set(["turn_active", "waiting_llm", "streaming", "thinking", "tool_running", "processing"]);
-  const busy = busyStatuses.has(String(target.fabric_status || ""));
+  return busyStatuses.has(String(target.fabric_status || ""));
+}
 
-  // router_queued semantic notification (monitor-level, not agent ACK).
-  const state = busy ? "busy" : "idle";
-  return busy
-    ? `router_queued: queued for ${target.agent_id} (${target.role}, ${state}). It will run next turn without interrupting current work.`
-    : `router_queued: queued for ${target.agent_id} (${target.role}, ${state}). It should start on next turn.`;
+function routeQueueStatusText(target: ActiveCoordinatorSnapshot): string {
+  const state = isCoordinatorBusy(target) ? "busy" : "idle";
+  return `router_queued: queued for ${target.agent_id} (${target.role}, ${state}). It will run next turn without interrupting current work.`;
 }
 
 function formatTelegramStatusReply(session: ChatSession, activeCoordinators: ActiveCoordinatorSnapshot[]): string {
@@ -612,6 +643,8 @@ export async function processTelegramMessage(
   }
 
   const session = getChatSession(chatId, userId);
+  healSessionCoordinator(session, activeCoordinators, defaultCoordinator);
+
   const targetId = intent.monitor_action === "route" && intent.intended_coordinator_id
     ? intent.intended_coordinator_id
     : (session.activeCoordinatorId || intent.intended_coordinator_id || defaultCoordinator);
@@ -651,21 +684,25 @@ export async function processTelegramMessage(
   registerPendingRequest(requestId, chatId, messageId, routeCheck.coordinator.agent_id, text);
 
   // router_queued is monitor-owned and emitted only after successful enqueue.
-  const queuedSend = await tgSendMessage(token, chatId, routeQueueStatusText(routeCheck.coordinator), { replyTo: messageId });
-  auditTelegramDelivery({
-    request_id: requestId,
-    status: "sent",
-    via: "monitor",
-    chat_id: queuedSend.chatId ?? chatId,
-    reply_to: messageId,
-    telegram_message_id: queuedSend.messageId,
-    target_coordinator: routeCheck.coordinator.agent_id,
-    details: {
-      lifecycle_event: "router_queued",
-      status: "router_queued",
-      monitor_owner: true,
-    },
-  });
+  // To avoid noisy duplicate Telegram messages, emit it only when the target is
+  // currently busy. When idle, the agent ACK should arrive quickly and is enough.
+  if (isCoordinatorBusy(routeCheck.coordinator)) {
+    const queuedSend = await tgSendMessage(token, chatId, routeQueueStatusText(routeCheck.coordinator), { replyTo: messageId });
+    auditTelegramDelivery({
+      request_id: requestId,
+      status: "sent",
+      via: "monitor",
+      chat_id: queuedSend.chatId ?? chatId,
+      reply_to: messageId,
+      telegram_message_id: queuedSend.messageId,
+      target_coordinator: routeCheck.coordinator.agent_id,
+      details: {
+        lifecycle_event: "router_queued",
+        status: "router_queued",
+        monitor_owner: true,
+      },
+    });
+  }
 
   return { handled: true, action: "router_queued", target: routeCheck.coordinator.agent_id };
 }
@@ -706,6 +743,20 @@ async function handleSystemCommand(
   return false;
 }
 
+function healSessionCoordinator(
+  session: ChatSession,
+  activeCoordinators: ActiveCoordinatorSnapshot[],
+  fallbackCoordinator = "secretary"
+): void {
+  const sessionTargetActive = session.activeCoordinatorId
+    ? activeCoordinators.some((c) => c.agent_id === session.activeCoordinatorId)
+    : false;
+  if (!sessionTargetActive) {
+    session.activeCoordinatorId = fallbackCoordinator;
+    touchSession(session);
+  }
+}
+
 export async function handleTelegramCommand(
   token: string,
   chatId: number,
@@ -716,6 +767,7 @@ export async function handleTelegramCommand(
 ): Promise<"handled" | "status" | "agents" | "forward"> {
   const lower = text.toLowerCase().trim();
   const session = getChatSession(chatId, userId);
+  healSessionCoordinator(session, activeCoordinators);
 
   if (lower === "/status") return "status";
   if (lower === "/agents" || lower === "/coordinators") return "agents";
@@ -764,9 +816,9 @@ export async function handleTelegramCommand(
   }
 
   if (lower === "/boss") {
-    session.activeCoordinatorId = "boss";
+    session.activeCoordinatorId = "secretary";
     touchSession(session);
-    await tgSendMessage(token, chatId, "Routing switched to: boss", { replyTo: messageId });
+    await tgSendMessage(token, chatId, "Routing switched to: secretary", { replyTo: messageId });
     return "handled";
   }
 

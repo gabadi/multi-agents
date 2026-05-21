@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Strict code reviewer and QA gatekeeper focused on security, edge cases, tests, maintainability, and acceptance criteria validation.
-model: fern/claude-sonnet-4-6
+model: fern/minimax-m2.7
 tools: read,grep,find,ls,bash
 thinking: medium
 mode: rpc
