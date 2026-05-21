@@ -481,8 +481,16 @@ function normalizeTelegramOutboundPayload(payload: TelegramResponsePayload, fall
     text: `${senderHeader}${rawText}`.trim(),
     parseMode: format === "telegram_markdown" ? "Markdown" : undefined,
     requestId: typeof payload.request_id === "string" ? payload.request_id : undefined,
-    chatId: typeof payload.chat_id === "number" ? payload.chat_id : undefined,
-    replyTo: typeof payload.reply_to === "number" ? payload.reply_to : undefined,
+    chatId: typeof payload.chat_id === "number"
+      ? payload.chat_id
+      : typeof payload.chat_id === "string"
+        ? Number(payload.chat_id)
+        : undefined,
+    replyTo: typeof payload.reply_to === "number"
+      ? payload.reply_to
+      : typeof payload.reply_to === "string"
+        ? Number(payload.reply_to)
+        : undefined,
     status,
     lifecycle_event: lifecycleFromStatus(status),
   };
