@@ -106,6 +106,7 @@ function parseArgs(): {
       .filter(Boolean),
     noWorkspaceSkills: args.includes("--no-workspace-skills") || process.env.FABRIC_NO_WORKSPACE_SKILLS === "TRUE",
     forceSession: args.includes("--force-session") || process.env.FABRIC_FORCE_SESSION === "TRUE",
+
   };
 }
 
@@ -381,32 +382,10 @@ async function main() {
     ...(reportTo ? { FABRIC_REPORT_TO: reportTo } : {}),
   };
 
-  // Inherit Docker and Testcontainers environment if available (for workers that run containerized tests)
-  function inheritDockerEnv(): Record<string, string> {
-    const inherited: Record<string, string> = {};
-    const dockerVars = [
-      "DOCKER_HOST",
-      "DOCKER_TLS_VERIFY",
-      "DOCKER_CERT_PATH",
-      "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
-      "TESTCONTAINERS_HOST_OVERRIDE",
-      "TESTCONTAINERS_DEVVM_TUNNEL_PORT",
-      "TESTCONTAINERS_DEVVM_REMOTE_SOCKET",
-      "TESTCONTAINERS_DEVVM_SSH_HOST",
-      "TESTCONTAINERS_DEVVM_HOST_IP",
-      "IGNORE_TESTCONTAINERS",
-    ];
-    for (const key of dockerVars) {
-      const value = process.env[key];
-      if (value !== undefined) {
-        inherited[key] = value;
-      }
-    }
-    return inherited;
-  }
+  // Agents start with a clean environment — no inherited parent env vars.
+  // Docker/Testcontainers vars from the parent process are NOT propagated to agents.
+  // Agents that need Docker should be launched with proper workspace/docker config.
 
-  // Merge Docker env into envVars
-  Object.assign(envVars, inheritDockerEnv());
 
   const envExports = Object.entries(envVars)
     .map(([k, v]) => `export ${k}=${shellQuote(v)}`)
