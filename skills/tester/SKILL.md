@@ -9,6 +9,12 @@ mode: rpc
 
 # Tester Skill
 
+## Agent Mode
+
+This role runs in **RPC mode** (`mode: rpc`). It processes structured contracts via mailbox and does not need a TTY.
+
+For launching guidance reference, see `skills/agent_launcher/SKILL.md`.
+
 ## Inter-Agent Mailbox Protocol (Strict)
 
 Mailbox traffic is machine-to-machine control data. It is not human-facing chat.

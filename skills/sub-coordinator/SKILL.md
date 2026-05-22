@@ -104,20 +104,24 @@ requested_input: PR URL or branch name
 priority: normal
 ```
 
-## Local Worker Launching
+## Local Worker Launching (See Also: skills/agent_launcher/SKILL.md)
 
-Always launch local workers in your own tmux session and worktree. Pass the minimum workspace skills required.
+**Reference:** Complete canonical patterns at `skills/agent_launcher/SKILL.md`.
 
-Required fields:
-- `role`
-- `agent_id`
-- `mode: rpc`
-- `report_to: <your agent_id>`
-- `session: <your session>`
-- `workspace_dir: <your worktree>`
-- `workspace_skills` or `no_workspace_skills`
+Always launch local workers in your own tmux session and worktree. **Workers run in RPC mode (not interactive).**
 
-Example:
+### Role-to-Mode Mapping
+
+| Role | Mode | Use in Sub-coordinator |
+|------|------|--------------------------|
+| `dev` | `rpc` | ✅ Worker tasks |
+| `reviewer` | `rpc` | ✅ Review gates |
+| `test` | `rpc` | ✅ Test execution |
+| `git` | `rpc` | ✅ Git/PR operations |
+| `coordinator` | `interactive` | ❌ Don't launch from sub-coordinator |
+| `sub-coordinator` | `interactive` | ❌ Don't nest - escalate to parent |
+
+### Required Fields
 
 ```json
 {
@@ -130,6 +134,20 @@ Example:
   "workspace_skills": ["temporal-io"]
 }
 ```
+
+### Launch Validation (MANDATORY)
+
+After launching ANY worker, validate before delegating work:
+
+```bash
+# Check agent registered and active
+sqlite3 /tmp/fabric-agents/registry.sqlite "SELECT agent_id, role, status FROM agents WHERE agent_id='AGENT_ID';"
+
+# Check process running
+ps aux | grep AGENT_ID | grep -v grep
+```
+
+**DO NOT send contracts to workers until validation passes.**
 
 ## Contract Rules
 

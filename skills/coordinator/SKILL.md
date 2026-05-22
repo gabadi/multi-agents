@@ -84,24 +84,121 @@ Coordinator action after a valid cleanup request:
 3. Do not read the closeout note unless the human explicitly asks or cleanup fails.
 4. When launching a follow-up sub-coordinator, pass task IDs/handles only. The new sub-coordinator must load context from PM/artifacts itself.
 
-## Launching Agents
+## Agent Launching (See Also: skills/agent_launcher/SKILL.md)
 
-Use the launcher or Fabric tools. For new tmux sessions from inside another tmux session, launch with `env -u TMUX` so the launcher creates the requested session instead of reusing the current pane.
+**CRITICAL:** This section provides coordinator-specific patterns. For complete canonical reference including validation checklists and common mistakes, see `skills/agent_launcher/SKILL.md`.
 
-Recommended worker launch fields:
-- `role`
-- `agent_id`
-- `mode`
-- `report_to`
-- `session`
-- `workspace_dir`
-- `workspace_skills` or `no_workspace_skills`
+### Role-to-Mode Mapping (ALWAYS)
 
-For sub-coordinators in external worktrees:
+| Role | Mode | Interactive | Launch Pattern |
+|------|------|-------------|----------------|
+| `coordinator` | `interactive` | YES | Manual tmux (Pattern B) |
+| `sub-coordinator` | `interactive` | YES | Manual tmux (Pattern B) |
+| `dev` | `rpc` | NO | `fabric_launch_agent` (Pattern A) |
+| `reviewer` | `rpc` | NO | `fabric_launch_agent` (Pattern A) |
+| `test` | `rpc` | NO | `fabric_launch_agent` (Pattern A) |
+| `git` | `rpc` | NO | `fabric_launch_agent` (Pattern A) |
+| `devops` | `rpc` | NO | `fabric_launch_agent` (Pattern A) |
+| `security` | `rpc` | NO | `fabric_launch_agent` (Pattern A) |
+
+**NEVER launch a coordinator in `rpc` mode - it needs stdin/TTY for interactive operation.**
+
+### Pattern A: Launching Workers (RPC Mode)
+
+For `dev`, `reviewer`, `test`, `git` workers, use `fabric_launch_agent`:
+
+```yaml
+Action: fabric_launch_agent
+Parameters:
+  agent_id: "dev-<task>-<n>"
+  role: "dev"
+  mode: "rpc"  # Workers always RPC
+  report_to: "<your-agent-id>"  # Report to you
+  workspace_dir: "/path/to/worktree"
+```
+
+**Post-launch validation REQUIRED:**
+```bash
+sqlite3 /tmp/fabric-agents/registry.sqlite "SELECT agent_id, role, status FROM agents WHERE agent_id='dev-<task>-<n>';"
+# Expected: shows 'active'
+```
+
+### Pattern B: Launching Sub-coordinators (Interactive Mode)
+
+For sub-coordinators (interactive mode, needs TTY), use manual tmux with `env -u TMUX`:
 
 ```bash
-env -u TMUX ENABLE_CMD_CENTER=TRUE FABRIC_PARENT_AGENT_ID=boss FABRIC_TASK_ID=<task_id> npx tsx /path/to/cmd-center-v2/src/core/launcher.ts   --role=sub-coordinator   --agent-id=sub-boss-<task_id>   --mode=interactive   --session=fabric-task-<task_id>   --workspace-dir="<worktree>"   --report-to=boss
+# === CONFIGURATION ===
+TASK_ID="<task-id>"
+SESSION_NAME="fabric-task-${TASK_ID}"
+AGENT_ID="sub-boss-${TASK_ID}"
+WORKDIR="/path/to/worktree"
+LAUNCHER_PATH="/Users/jescobar/code/cmd-center-v2/src/core/launcher.ts"
+NODE_BIN="/Users/jescobar/.local/share/mise/installs/node/24.15.0/bin"
+PARENT_ID="<your-agent-id>"
+
+# === STEP 1: Kill any existing ===
+tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+pkill -f "$AGENT_ID" || true
+
+# === STEP 2: Create session with env -u TMUX ===
+env -u TMUX tmux new-session -d -s "$SESSION_NAME" -n 'sub-coordinator' -c "$WORKDIR"
+
+# === STEP 3: Launch sub-coordinator in interactive mode ===
+tmux send-keys -t "$SESSION_NAME":0 "export PATH=$NODE_BIN:\$PATH && ENABLE_CMD_CENTER=TRUE npx tsx $LAUNCHER_PATH --role=sub-coordinator --agent-id=$AGENT_ID --mode=interactive --report-to=$PARENT_ID" Enter
+
+# === STEP 4: VALIDATE ===
+sleep 2
+sqlite3 /tmp/fabric-agents/registry.sqlite "SELECT agent_id, role, status FROM agents WHERE agent_id='$AGENT_ID';"
+tmux list-windows -t "$SESSION_NAME"
 ```
+
+**Why `env -u TMUX`?**
+Prevents the new session from nesting inside your current tmux pane. Creates a top-level session.
+
+### Kill and Recreate Pattern
+
+When replacing a crashed or stuck agent:
+
+```bash
+# Kill existing
+pkill -f AGENT_ID || true
+tmux kill-session -t SESSION_NAME 2>/dev/null || true
+
+# Verify cleanup
+tmux list-sessions 2>/dev/null | grep SESSION_NAME || echo "Session killed"
+sqlite3 /tmp/fabric-agents/registry.sqlite "SELECT status FROM agents WHERE agent_id='AGENT_ID';" 2>/dev/null || echo "Agent cleared"
+
+# Wait and recreate
+sleep 1
+# ... follow Pattern A or B ...
+
+# Validate
+sqlite3 /tmp/fabric-agents/registry.sqlite "SELECT agent_id, status FROM agents WHERE agent_id='AGENT_ID';"
+# MUST show 'active' before reporting success
+```
+
+### Launch Validation Checklist (MANDATORY)
+
+After EVERY agent launch:
+
+1. **Registry check:** Agent appears with `active` status
+   ```bash
+   sqlite3 /tmp/fabric-agents/registry.sqlite "SELECT agent_id, role, status FROM agents WHERE agent_id='AGENT_ID';"
+   ```
+
+2. **tmux session check:** Session and windows exist
+   ```bash
+   tmux list-sessions | grep SESSION_NAME
+   tmux list-windows -t SESSION_NAME
+   ```
+
+3. **Process check:** Node process running
+   ```bash
+   ps aux | grep AGENT_ID | grep -v grep
+   ```
+
+**DO NOT delegate work to an agent until validation passes.**
 
 ## Structured Contracts
 
