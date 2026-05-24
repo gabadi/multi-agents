@@ -1243,6 +1243,7 @@
       acpSelectedAgentId: persistedUiState.acpSelectedAgentId || localStorage.getItem('acpSelectedAgentId') || '',
       acpOutputs: new Map(),
       acpHumanMessages: new Map(),
+      acpChatMessages: new Map(),
       acpPreviewRequested: new Set(),
       acpSending: false,
       acpRenderedAgentId: '',
@@ -2637,6 +2638,29 @@
       return state.acpOutputs.get(agentId) || [];
     }
 
+    function getAcpChatMessages(agentId) {
+      return state.acpChatMessages.get(agentId) || [];
+    }
+
+    function setAcpChatMessages(agentId, messages = []) {
+      const byKey = new Map();
+      for (const m of getAcpChatMessages(agentId)) {
+        byKey.set(m.id || acpOutputKey(m), { ...m, source: 'agent' });
+      }
+      for (const m of messages) {
+        const normalized = {
+          ...m,
+          id: m.id || acpOutputKey(m),
+          timestamp: m.ts || m.timestamp || new Date().toISOString(),
+          content: m.content || m.text || '',
+          source: 'agent',
+        };
+        byKey.set(normalized.id, normalized);
+      }
+      const merged = [...byKey.values()].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      state.acpChatMessages.set(agentId, merged);
+    }
+
     function acpOutputKey(message = {}) {
       if (message.id) return `id:${message.id}`;
       if (message.timestamp) return `ts:${message.timestamp}`;
@@ -2703,6 +2727,15 @@
       if (state.activeTab === 'operations') renderOperationsRail();
     }
 
+    async function fetchAcpChat(agentId) {
+      try {
+        const data = await fetchJson(`${API}/api/chat?agent=${encodeURIComponent(agentId)}&limit=200`);
+        if (Array.isArray(data.messages)) setAcpChatMessages(agentId, data.messages);
+      } catch (err) {
+        // Chat endpoint is optional; silently fail so outputs always render
+      }
+    }
+
     async function fetchAcpMessages() {
       if (state.acpPaused) return;
       const agentId = ensureAcpSelection();
@@ -2711,16 +2744,19 @@
         return;
       }
       fetchAcpPreviews();
-      try {
-        const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/outputs?limit=200`);
-        if (Array.isArray(data.messages)) setAcpOutputs(agentId, data.messages);
-        if (state.activeTab === 'agents') renderAgents();
-        if (state.activeTab === 'operations') renderOperationsRail();
-      } catch (err) {
-        addEventLog('acp-output-error', `No se pudo cargar outputs de ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
-        if (state.activeTab === 'agents') renderAgents();
-        if (state.activeTab === 'operations') renderOperationsRail();
-      }
+      await Promise.all([
+        (async () => {
+          try {
+            const data = await fetchJson(`${API}/api/agents/${encodeURIComponent(agentId)}/outputs?limit=200`);
+            if (Array.isArray(data.messages)) setAcpOutputs(agentId, data.messages);
+          } catch (err) {
+            addEventLog('acp-output-error', `No se pudo cargar outputs de ${agentId}: ${err.message}`, { agent_id: agentId }, 'agent');
+          }
+        })(),
+        fetchAcpChat(agentId),
+      ]);
+      if (state.activeTab === 'agents') renderAgents();
+      if (state.activeTab === 'operations') renderOperationsRail();
     }
 
     function renderInlineMarkdown(text) {
@@ -2833,7 +2869,8 @@
 
       const human = (state.acpHumanMessages.get(agentId) || []).map(m => ({ ...m, source: 'human' }));
       const outputs = getAcpOutputs(agentId).map(m => ({ ...m, source: 'agent' }));
-      const all = human.concat(outputs).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      const chatMessages = getAcpChatMessages(agentId).map(m => ({ ...m, source: 'agent' }));
+      const all = human.concat(outputs).concat(chatMessages).sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
       const messagesSig = all.length
         ? acpMessageSignature(agentId, all)

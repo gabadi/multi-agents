@@ -4526,23 +4526,33 @@ ${keyRows || "| No keys found | - | - |"}
     },
   });
 
-  // ── Log available tools on extension load ──
-  setTimeout(() => {
-    const allTools = pi.getAllTools();
-    const fabricTools = allTools.filter((t) => t.name.startsWith("fabric_")).map((t) => t.name);
-    const pmTools = allTools.filter((t) => t.name.startsWith("pm_")).map((t) => t.name);
-    const fernTools = allTools.filter((t) => t.name.startsWith("fern_")).map((t) => t.name);
-    
-    console.log(`[fabric] Extension loaded with ${allTools.length} tools:`);
-    console.log(`[fabric]   Fabric tools (${fabricTools.length}): ${fabricTools.join(", ") || "none"}`);
-    console.log(`[fabric]   PM tools (${pmTools.length}): ${pmTools.join(", ") || "none"}`);
-    console.log(`[fabric]   Fern tools (${fernTools.length}): ${fernTools.join(", ") || "none"}`);
-    
-    if (activeCtx) {
-      activeCtx.ui.notify(
-        `🔧 Fabric loaded: ${fabricTools.length} fabric, ${pmTools.length} PM, ${fernTools.length} fern tools`,
-        "info"
-      );
-    }
-  }, 100);
+  // ── Log available tools after extension runtime is ready ──
+  // getAllTools() cannot be called during extension loading; defer until
+  // the runtime is initialized. Use a small retry loop instead of a single
+  // setTimeout to avoid race conditions on slower machines.
+  (function logToolsAfterReady(attempt = 0) {
+    if (attempt > 30) return; // give up after ~3 s
+    setTimeout(() => {
+      try {
+        const allTools = pi.getAllTools();
+        const fabricTools = allTools.filter((t) => t.name.startsWith("fabric_")).map((t) => t.name);
+        const pmTools = allTools.filter((t) => t.name.startsWith("pm_")).map((t) => t.name);
+        const fernTools = allTools.filter((t) => t.name.startsWith("fern_")).map((t) => t.name);
+
+        console.log(`[fabric] Extension loaded with ${allTools.length} tools:`);
+        console.log(`[fabric]   Fabric tools (${fabricTools.length}): ${fabricTools.join(", ") || "none"}`);
+        console.log(`[fabric]   PM tools (${pmTools.length}): ${pmTools.join(", ") || "none"}`);
+        console.log(`[fabric]   Fern tools (${fernTools.length}): ${fernTools.join(", ") || "none"}`);
+
+        if (activeCtx) {
+          activeCtx.ui.notify(
+            `🔧 Fabric loaded: ${fabricTools.length} fabric, ${pmTools.length} PM, ${fernTools.length} fern tools`,
+            "info"
+          );
+        }
+      } catch {
+        logToolsAfterReady(attempt + 1);
+      }
+    }, 100);
+  })();
 }
